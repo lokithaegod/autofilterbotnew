@@ -13,8 +13,9 @@ import (
 
 func (c *Client) SaveFile(f *model.File) error {
 	// Find any with matching file_id
-	if res := c.fileCollection.FindOne(c.ctx, fileIdFilter(f.FileId)); res.Err() != mongo.ErrNoDocuments {
-		return database.FileAlreadyExistsError{FileName: f.FileName}
+	if err := c.fileCollection.FindOne(c.ctx, fileIdFilter(f.FileId)).Err(); err != mongo.ErrNoDocuments {
+		if err == nil { return database.FileAlreadyExistsError{FileName: f.FileName} }
+		return err
 	}
 
 	// Find a document that starts with the same file_name and is within a 100 byte range of file_size
@@ -25,8 +26,9 @@ func (c *Client) SaveFile(f *model.File) error {
 			{Key: "$lte", Value: f.FileSize + 100},
 		}},
 	}
-	if res := c.fileCollection.FindOne(c.ctx, duplicateFilter); res.Err() != mongo.ErrNoDocuments {
-		return database.FileAlreadyExistsError{FileName: f.FileName}
+	if err := c.fileCollection.FindOne(c.ctx, duplicateFilter).Err(); err != mongo.ErrNoDocuments {
+		if err == nil { return database.FileAlreadyExistsError{FileName: f.FileName} }
+		return err
 	}
 
 	_, err := c.fileCollection.InsertOne(c.ctx, f)
