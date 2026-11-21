@@ -45,7 +45,7 @@ func Navigate(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	files := r.Files
 
-	if pageIndex > len(files)-1 {
+	if pageIndex < 0 || pageIndex > len(files)-1 {
 		c.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: "404: Result Page Not Found", ShowAlert: true})
 		_app.Log.Warn("navg: result page not found", zap.String("unique_id", r.UniqueId), zap.Int("index", pageIndex))
 		return nil
@@ -58,6 +58,9 @@ func Navigate(bot *gotgbot.Bot, ctx *ext.Context) error {
 		chatId  = c.Message.GetChat().Id
 	)
 
+	if !hasEpisodes(files) {
+        buttons=append(buttons,[]gotgbot.InlineKeyboardButton{{Text:"🎬 Movie cards",CallbackData:cardsCallback(r.UniqueId,0)}})
+    }
 	buttons = append(buttons, headerRow(r.UniqueId, pageIndex))
 	buttons = append(buttons, filterButton(r.UniqueId))
 	buttons = append(buttons, pageFiles.Process(chatId, bot.Username, _app.Config)...)
