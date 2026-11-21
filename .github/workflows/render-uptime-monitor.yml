@@ -1,0 +1,34 @@
+name: AutoFilterMG Free Uptime Check
+
+on:
+  schedule:
+    # Every 10 minutes; avoid top-of-hour congestion.
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autofiltermg-uptime-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check Render bot web endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check HTTP response
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 2 --retry-delay 5 \
+            --connect-timeout 15 --max-time 90 \
+            --output /tmp/render-health.txt \
+            "https://autofilterbotnew-ioi4.onrender.com/"
+          grep -Fq "Telegram bot process is running" /tmp/render-health.txt
+          echo "AutoFilterMG HTTP endpoint responding."
+
+# This only checks that the web listener responds, not Telegram polling,
+# MongoDB health, Force Sub, or index operations.
+# GitHub scheduled workflows may be delayed, skipped, or disabled.
