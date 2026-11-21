@@ -33,6 +33,16 @@ func NewListenerArray() *ListenerArray {
 	return &ListenerArray{list: make([]*Listener, 0)}
 }
 
+// HasMatch checks whether this message belongs to an active interactive conversation.
+func (ls *ListenerArray) HasMatch(m *gotgbot.Message) bool {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	for _, l := range ls.list {
+		if l.filter(m) { return true }
+	}
+	return false
+}
+
 // Add adds a listener to the listener.
 func (ls *ListenerArray) Add(l *Listener) {
 	ls.mu.Lock()
