@@ -44,4 +44,8 @@ func TestMovieCardKeyboardAndPages(t *testing.T){
  if !strings.Contains(keyboard[1][0].Text,"✅📜"){t.Fatalf("expected Malayalam subtitle badge in movie card, got %q",keyboard[1][0].Text)}
  if keyboard[0][0].CallbackData!="navg|abcdefghijklmno_0"{t.Fatal("original file list link changed")}
  if len(keyboard[1][0].CallbackData)>64{t.Fatal("callback data over Telegram's 64 byte limit")}
+ detail:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","all")
+ if len(detail)<5||!strings.Contains(detail[2][1].Text,"Malayalam Subs"){t.Fatalf("missing direct subtitle choice: %+v",detail)}
+ subs:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","msub")
+ if len(subs)<5||!strings.Contains(subs[3][0].Text,"മലയാളം"){t.Fatalf("subtitle-only view not selecting subtitle: %+v",subs)}
 }
