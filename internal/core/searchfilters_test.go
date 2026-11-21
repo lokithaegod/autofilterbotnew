@@ -40,3 +40,26 @@ func TestSeasonFilterAndOrder(t *testing.T) {
  noSeason:=matchingSeasonFiles(pages,"all","all","3")
  if len(noSeason)!=0{t.Fatalf("missing season should be empty")}
 }
+
+func TestMalayalamSubtitleFilter(t *testing.T) {
+ cases:=[]struct{name string; subtitle,malayalam bool}{
+  {"Bruce.Almighty.2003.BluRay.മലയാളം (1).srt",true,true},
+  {"Prometheus.2012.1080p.BrRip.മലയാളം.srt",true,true},
+  {"Film.MAL.SUB.srt",true,true},
+  {"Film.MSub.ass",true,true},
+  {"Film.Tamil.srt",true,false},
+  {"Film.English.vtt",true,false},
+  {"Film.720p.MAL.SUB.mkv",false,false},
+  {"Film.720p.mp4",false,false},
+ }
+ for _,tt:=range cases {
+  if got:=isSubtitleFile(tt.name);got!=tt.subtitle {t.Errorf("file %q subtitle %v want %v",tt.name,got,tt.subtitle)}
+  if got:=isMalayalamSubtitle(tt.name);got!=tt.malayalam {t.Errorf("file %q malayalam %v want %v",tt.name,got,tt.malayalam)}
+ }
+ makeFile:=func(name string) autofilter.File{return autofilter.File{File:model.File{FileName:name}}}
+ pages:=[]autofilter.Files{{makeFile("Bruce.Almighty.2003.720p.mp4"),makeFile("Bruce.Almighty.2003.BluRay.മലയാളം.srt"),makeFile("Bruce.Almighty.2003.Tamil.srt")}}
+ if got:=matchingSubtitleFiles(pages,"all","all","all","msub");len(got)!=1||got[0].FileName!="Bruce.Almighty.2003.BluRay.മലയാളം.srt" {t.Errorf("malayalam results: %v",got)}
+ if got:=matchingSubtitleFiles(pages,"all","all","all","sub");len(got)!=2 {t.Errorf("all subtitles: %v",got)}
+ if got:=matchingSubtitleFiles(pages,"all","all","all","video");len(got)!=1||got[0].FileName!="Bruce.Almighty.2003.720p.mp4" {t.Errorf("videos: %v",got)}
+ if got:=matchingSubtitleFiles(pages,"all","mal","all","msub");len(got)!=1 {t.Errorf("malayalam language and file type: %v",got)}
+}
