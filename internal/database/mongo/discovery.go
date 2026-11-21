@@ -8,6 +8,8 @@ import (
 
  "github.com/Jisin0/autofilterbot/internal/model"
  "go.mongodb.org/mongo-driver/bson"
+ "go.mongodb.org/mongo-driver/mongo"
+ "errors"
  "go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -99,7 +101,7 @@ func (c *Client) IsUserBlocked(id int64)(bool,error){
  var v struct {Blocked bool `bson:"blocked"`}
  err:=c.db.Collection("BlockedUsers").FindOne(c.ctx,bson.M{"_id":id}).Decode(&v)
  if err!=nil {
-  if err.Error()=="mongo: no documents in result" {return false,nil}
+  if errors.Is(err,mongo.ErrNoDocuments) {return false,nil}
   return false,err
  }
  return v.Blocked,nil
