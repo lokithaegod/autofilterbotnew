@@ -27,6 +27,7 @@ func qualityMatches(name, quality string) bool {
 
 func languageMatches(name, language string) bool {
  if language == "all" { return true }
+ if language == "mal" && strings.Contains(name,"മലയാളം") {return true}
  // Match labels in filenames only; never infer audio track languages.
  aliases := map[string][]string{
   "mal": {"malayalam", "mal", "malyalam"},
@@ -98,7 +99,7 @@ func isMalayalamSubtitle(name string) bool {
 func subtitleMatches(name,kind string) bool {
  switch kind {
  case "all": return true
- case "video": return !isSubtitleFile(name)
+ case "video": return videoExtension.MatchString(strings.TrimSpace(name))
  case "sub": return isSubtitleFile(name)
  case "msub": return isMalayalamSubtitle(name)
  default: return false
