@@ -142,7 +142,7 @@ func Logs(bot *gotgbot.Bot, ctx *ext.Context) error {
 func sendPrivateStats(bot *gotgbot.Bot, chatID int64) error {
  s,err:=_app.DB.Stats()
  if err!=nil{return err}
- text:=fmt.Sprintf("📈 Private Bot Statistics\\n👥 Users: %d\\n📁 Files: %s\\n👥 Groups: %d\\n⏱ Uptime: %s",s.Users,s.Files,s.Groups,time.Since(_app.StartTime).Truncate(time.Second))
+ text:=fmt.Sprintf("📈 Private Bot Statistics\n👥 Users: %d\n📁 Files: %s\n👥 Groups: %d\n⏱ Uptime: %s",s.Users,s.Files,s.Groups,time.Since(_app.StartTime).Truncate(time.Second))
  _,err=bot.SendMessage(chatID,text,nil)
  return err
 }
