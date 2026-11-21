@@ -51,7 +51,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	})
 
 	d.AddHandlerToGroup(handlers.NewMessage(message.Supergroup, Autofilter), autofilterHandlerGroup)
-	d.AddHandlerToGroup(handlers.NewMessage(message.Private, PrivateAutofilter), autofilterHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewMessage(message.Private, PrivateLastFile), autofilterHandlerGroup)
 
 	d.AddHandlerToGroup(handlers.NewCommand("start", StartCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"about", "help", "privacy"}, StaticCommands), commandHandlerGroup)
@@ -64,6 +64,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCommand("genlink", GenLink), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("broadcast", Broadcast), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("index", CmdIndex), commandHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewCommand("updateindex", AutoIndexLast), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("setwelcome", SetWelcome), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("resetwelcome", ResetWelcome), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("setwelcomebutton", SetWelcomeButton), commandHandlerGroup)
