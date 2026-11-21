@@ -100,6 +100,7 @@ func parseDiscover(input string)(mongo.CatalogFilter,error){
 
 func sendCatalog(bot *gotgbot.Bot,chatID int64,category string,files []model.File) error {
  if len(files)==0 {_,err:=bot.SendMessage(chatID,"No matching indexed files found.",nil);return err}
+ if len(files)>0 && (category=="SERIES" || category=="Filtered files") {autofilter.SortModelEpisodes(files)}
  if len(files)>15 {files=files[:15]}
  wrapped:=make(autofilter.Files,0,len(files))
  for _,f:=range files {wrapped=append(wrapped,autofilter.File{File:f})}
