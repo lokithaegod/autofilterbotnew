@@ -45,51 +45,8 @@ func languageMatches(name, language string) bool {
 
 // Subtitle files are independent Telegram documents, not video containers with
 // subtitle tracks. Never promise an embedded subtitle based on an MKV filename.
-var subtitleExtension = regexp.MustCompile(`(?i)\.(srt|ass|ssa|vtt|sub)package core
-
-import (
- "fmt"
- "regexp"
- "sort"
- "strconv"
- "strings"
-
- "github.com/Jisin0/autofilterbot/internal/autofilter"
- "github.com/Jisin0/autofilterbot/pkg/callbackdata"
- "github.com/PaulSonOfLars/gotgbot/v2"
- "github.com/PaulSonOfLars/gotgbot/v2/ext"
- "go.uber.org/zap"
-)
-
-var qualityToken = regexp.MustCompile(`(?i)(^|[^a-z0-9])(480p|720p|1080p|2160p|4k)([^a-z0-9]|$)`)
-
-func qualityMatches(name, quality string) bool {
- if quality == "all" { return true }
- found := qualityToken.FindStringSubmatch(strings.ToLower(name))
- if len(found) < 3 { return false }
- token := found[2]
- if token == "4k" { token = "2160p" }
- return token == quality
-}
-
-func languageMatches(name, language string) bool {
- if language == "all" { return true }
- // Match labels in filenames only; never infer audio track languages.
- aliases := map[string][]string{
-  "mal": {"malayalam", "mal", "malyalam"},
-  "tam": {"tamil", "tam"},
-  "hin": {"hindi", "hin"},
-  "eng": {"english", "eng"},
- }
- lower := strings.ToLower(name)
- for _, word := range aliases[language] {
-  re := regexp.MustCompile(`(^|[^a-z])` + word + `([^a-z]|$)`)
-  if re.MatchString(lower) { return true }
- }
- return false
-}
-
-)
+var subtitleExtension = regexp.MustCompile(`(?i)\.(srt|ass|ssa|vtt|sub)$`)
+var videoExtension = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|webm|m4v|ts)$`)
 var malayalamSubtitleTag = regexp.MustCompile(`(?i)(^|[^a-z])(malayalam|malyalam|mal[._ -]*sub|m[._ -]*sub|msub)([^a-z]|$)`)
 func isSubtitleFile(name string) bool { return subtitleExtension.MatchString(strings.TrimSpace(name)) }
 func isMalayalamSubtitle(name string) bool {
