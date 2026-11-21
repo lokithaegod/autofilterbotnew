@@ -59,6 +59,7 @@ func Navigate(bot *gotgbot.Bot, ctx *ext.Context) error {
 	)
 
 	buttons = append(buttons, headerRow(r.UniqueId, pageIndex))
+	buttons = append(buttons, filterButton(r.UniqueId))
 	buttons = append(buttons, pageFiles.Process(chatId, bot.Username, _app.Config)...)
 	buttons = append(buttons, footerRow(r.UniqueId, pageIndex, len(files)))
 
