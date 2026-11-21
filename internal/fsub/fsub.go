@@ -37,7 +37,7 @@ func IsMember(bot *gotgbot.Bot, chatId, userId int64) (bool, error) {
 		}
 
 		// if other error returns true with error
-		return true, fmt.Errorf("fsub: failed to get chat member: %w", err)
+		return false, fmt.Errorf("fsub: failed to get chat member: %w", err)
 	}
 
 	switch m := member.(type) {
@@ -89,7 +89,8 @@ func GetNotMemberOrRequest(bot *gotgbot.Bot, db *mongo.Client, f []model.Channel
 	for _, c := range f {
 		isMember, err := IsMember(bot, c.ID, userId)
 		if err != nil {
-			allErrors = append(allErrors, err) //TODO: wrap error with channel info
+			allErrors = append(allErrors, err) // Membership cannot be verified; do not grant access.
+			continue
 		}
 
 		if isMember {
@@ -98,9 +99,12 @@ func GetNotMemberOrRequest(bot *gotgbot.Bot, db *mongo.Client, f []model.Channel
 
 		if user == nil {
 			user, err = db.GetUserJoinRequests(userId)
-			if err != nil {
+			if database.IsNoDocumentsError(err) {
+				// A normal new user has no join-request record. Treat as no pending requests.
+				user = &model.User{}
+			} else if err != nil {
 				allErrors = append(allErrors, err)
-				continue // or break to prevent further db queries?
+				continue
 			}
 		}
 
@@ -156,7 +160,13 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 
 	notJoined, err := GetNotMemberOrRequest(bot, app.GetDB(), app.GetConfig().GetFsubChannels(), userID)
 	if err != nil {
-		return true, pkgerrors.Wrap(err, "fsub: ")
+		// Never send files if Telegram membership or the database cannot be checked.
+		if ctx.InlineQuery != nil {
+			_, _ = ctx.InlineQuery.Answer(bot, []gotgbot.InlineQueryResult{}, &gotgbot.AnswerInlineQueryOpts{CacheTime: 0})
+		} else {
+			_, _ = bot.SendMessage(chatID, "⚠️ Unable to verify channel membership right now. Please try again later.", nil)
+		}
+		return false, pkgerrors.Wrap(err, "fsub: ")
 	}
 
 	if len(notJoined) == 0 {
