@@ -9,7 +9,12 @@ import (
 
 // IsBadQuery report whether the query is bad based on the message entities and length of the text.
 func IsBadQuery(text string, entities []gotgbot.MessageEntity) bool {
-	if len(text) > 30 || len(text) < 2 { //TODO: might wanna change these hardocded values
+	return IsBadQueryWithLimit(text, entities, 30)
+}
+
+// IsBadQueryWithLimit applies the same safety checks with a custom filename length limit.
+func IsBadQueryWithLimit(text string, entities []gotgbot.MessageEntity, maxLength int) bool {
+	if len(text) > maxLength || len(text) < 2 {
 		return true
 	}
 
