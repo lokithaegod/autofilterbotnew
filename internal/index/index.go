@@ -306,8 +306,14 @@ func (o *Operation) run(ctx context.Context) {
 			}
 
 			done := make(chan struct{})
-			msgChan <- indexBatch{messages: msgs, done: done}
-			<-done
+			select {
+			case msgChan <- indexBatch{messages: msgs, done: done}:
+			case <-ctx.Done(): return
+			}
+			select {
+			case <-done:
+			case <-ctx.Done(): return
+			}
 			o.CurrentMessageID = int64(messageChunk[len(messageChunk)-1].(*telegram.InputMessageID).ID) // sets current id to that of last msg in chunk
 		}
 	}
