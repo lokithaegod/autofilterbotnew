@@ -1,9 +1,12 @@
-FROM golang:1.22-bullseye
-
-RUN mkdir /app
+FROM golang:1.24-bookworm AS builder
 WORKDIR /app
-RUN cd /app
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go build .
+RUN CGO_ENABLED=1 go build -o /app/autofilterbot .
 
-CMD ["./autofilterbot"]
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app/autofilterbot /app/autofilterbot
+CMD ["/app/autofilterbot"]
