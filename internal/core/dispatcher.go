@@ -51,6 +51,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	})
 
 	d.AddHandlerToGroup(handlers.NewMessage(message.Supergroup, Autofilter), autofilterHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewMessage(message.Private, PrivateAutofilter), autofilterHandlerGroup)
 
 	d.AddHandlerToGroup(handlers.NewCommand("start", StartCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"about", "help", "privacy"}, StaticCommands), commandHandlerGroup)
