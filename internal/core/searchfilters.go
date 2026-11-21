@@ -3,6 +3,7 @@ package core
 import (
  "fmt"
  "regexp"
+ "sort"
  "strconv"
  "strings"
 
@@ -41,46 +42,64 @@ func languageMatches(name, language string) bool {
  return false
 }
 
-func matchingFiles(pages []autofilter.Files, quality, language string) autofilter.Files {
+// Season selection runs after quality and language checks; "all" includes movies.
+func matchingSeasonFiles(pages []autofilter.Files, quality, language, season string) autofilter.Files {
  var out autofilter.Files
- for _, page := range pages {
-  for _, file := range page {
-   if qualityMatches(file.FileName, quality) && languageMatches(file.FileName, language) {
-    out = append(out, file)
-   }
+ for _,page:=range pages {for _,f:=range page {
+  if !qualityMatches(f.FileName,quality)||!languageMatches(f.FileName,language) {continue}
+  if season!="all" {
+   n,ok:=autofilter.SeasonNumber(f.FileName)
+   if !ok||strconv.Itoa(n)!=season {continue}
   }
- }
+  out=append(out,f)
+ }}
  return out
 }
 
+// Keep older API helper for existing test compatibility.
+func matchingFiles(pages []autofilter.Files,quality,language string) autofilter.Files {
+ return matchingSeasonFiles(pages,quality,language,"all")
+}
+func availableSeasons(pages []autofilter.Files) []int {
+ seasons:=map[int]bool{}
+ for _,page:=range pages {for _,f:=range page {
+  if season,ok:=autofilter.SeasonNumber(f.FileName);ok {seasons[season]=true}
+ }}
+ var out []int
+ for n:=range seasons {out=append(out,n)}
+ sort.Ints(out)
+ return out
+}
 func filterButton(id string) []gotgbot.InlineKeyboardButton {
- return []gotgbot.InlineKeyboardButton{{Text:"🎬 Quality / Language", CallbackData:"flt|"+id+"_all_all_0"}}
+ return []gotgbot.InlineKeyboardButton{{Text:"🎬 Season / Quality / Language",CallbackData:filterCallback(id,"all","all","all",0)}}
 }
-
-func filterCallback(id, quality, language string, page int) string {
- return fmt.Sprintf("flt|%s_%s_%s_%d", id, quality, language, page)
+func filterCallback(id,quality,language,season string,page int)string{
+ return fmt.Sprintf("flt|%s_%s_%s_%s_%d",id,quality,language,season,page)
 }
-
 func FilterSearch(bot *gotgbot.Bot, ctx *ext.Context) error {
  c := ctx.CallbackQuery
  data := callbackdata.FromString(c.Data)
- if len(data.Args) != 4 { _,_ = c.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text:"Invalid filter",ShowAlert:true}); return nil }
- id, q, l := data.Args[0], data.Args[1], data.Args[2]
+ if len(data.Args) != 5 { _,_ = c.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text:"Invalid filter",ShowAlert:true}); return nil }
+ id, q, l, season := data.Args[0], data.Args[1], data.Args[2], data.Args[3]
  validQ := map[string]bool{"all":true,"480p":true,"720p":true,"1080p":true,"2160p":true}
  validL := map[string]bool{"all":true,"mal":true,"tam":true,"hin":true,"eng":true}
- page,err := strconv.Atoi(data.Args[3])
+ page,err := strconv.Atoi(data.Args[4])
  if err!=nil || !validQ[q] || !validL[l] || page<0 { _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid filter",ShowAlert:true}); return nil }
  result,ok,err := _app.Cache.Autofilter.Get(id)
  if err!=nil || !ok { _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Search expired. Search again.",ShowAlert:true}); return nil }
  if result.FromUser!=c.From.Id { _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Only the search requester can filter results.",ShowAlert:true}); return nil }
- matches := matchingFiles(result.Files,q,l)
+ seasons:=availableSeasons(result.Files)
+ validSeason:=season=="all"
+ for _,n:=range seasons {if strconv.Itoa(n)==season {validSeason=true;break}}
+ if !validSeason {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Unknown season",ShowAlert:true});return nil}
+ matches:=matchingSeasonFiles(result.Files,q,l,season)
  var keyboard [][]gotgbot.InlineKeyboardButton
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"🎞 Quality",CallbackData:"ignore"}})
  var qualityRow []gotgbot.InlineKeyboardButton
  for _, item := range []struct{code,label string}{{"all","All"},{"480p","480p"},{"720p","720p"},{"1080p","1080p"},{"2160p","4K"}} {
   label := item.label
   if q==item.code {label="✅ "+label}
-  qualityRow=append(qualityRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,item.code,l,0)})
+  qualityRow=append(qualityRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,item.code,l,season,0)})
  }
  keyboard=append(keyboard,qualityRow)
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"🌐 Language (filename labels)",CallbackData:"ignore"}})
@@ -88,9 +107,25 @@ func FilterSearch(bot *gotgbot.Bot, ctx *ext.Context) error {
  for _, item := range []struct{code,label string}{{"all","All"},{"mal","Malayalam"},{"tam","Tamil"},{"hin","Hindi"},{"eng","English"}} {
   label := item.label
   if l==item.code {label="✅ "+label}
-  languageRow=append(languageRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,q,item.code,0)})
+  languageRow=append(languageRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,q,item.code,season,0)})
  }
  keyboard=append(keyboard,languageRow)
+ if len(seasons)>0 {
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📺 Season",CallbackData:"ignore"}})
+  choices:=[]gotgbot.InlineKeyboardButton{{Text:"All Seasons",CallbackData:filterCallback(id,q,l,"all",0)}}
+  if season=="all" {choices[0].Text="✅ All Seasons"}
+  keyboard=append(keyboard,choices)
+  // Group the seasons into short rows to keep the Telegram keyboard readable.
+  var row []gotgbot.InlineKeyboardButton
+  for _,n:=range seasons {
+   code:=strconv.Itoa(n)
+   label:=fmt.Sprintf("S%02d",n)
+   if season==code {label="✅ "+label}
+   row=append(row,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,q,l,code,0)})
+   if len(row)==4 {keyboard=append(keyboard,row);row=nil}
+  }
+  if len(row)>0 {keyboard=append(keyboard,row)}
+ }
  const perPage=8
  totalPages := (len(matches)+perPage-1)/perPage
  if totalPages==0 {totalPages=1}
@@ -104,9 +139,9 @@ func FilterSearch(bot *gotgbot.Bot, ctx *ext.Context) error {
   keyboard=append(keyboard,matches[start:end].Process(c.Message.GetChat().Id,bot.Username,_app.Config)...)
  }
  var paging []gotgbot.InlineKeyboardButton
- if page>0 {paging=append(paging,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:filterCallback(id,q,l,page-1)})}
+ if page>0 {paging=append(paging,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:filterCallback(id,q,l,season,page-1)})}
  paging=append(paging,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d files",page+1,totalPages,len(matches)),CallbackData:"ignore"})
- if page+1<totalPages {paging=append(paging,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:filterCallback(id,q,l,page+1)})}
+ if page+1<totalPages {paging=append(paging,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:filterCallback(id,q,l,season,page+1)})}
  keyboard=append(keyboard,paging)
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Original results",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  _,_,err=c.Message.EditReplyMarkup(bot,&gotgbot.EditMessageReplyMarkupOpts{ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:keyboard}})
