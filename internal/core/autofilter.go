@@ -185,10 +185,16 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		uniqueId = functions.RandString(15)
 	)
 
-	buttons = append(buttons, headerRow(uniqueId, 0))
-	buttons = append(buttons, filterButton(uniqueId))
-	buttons = append(buttons, files[0].Process(inputMessage.GetChat().Id, bot.Username, _app.Config)...)
-	buttons = append(buttons, footerRow(uniqueId, 0, len(files)))
+	if !hasEpisodes(files) {
+        // Default movie searches to one title card per film. Original file
+        // results and all existing filters remain one tap away.
+        buttons=movieCardsKeyboard(uniqueId,buildMovieCards(files),0)
+    } else {
+        buttons = append(buttons, headerRow(uniqueId, 0))
+        buttons = append(buttons, filterButton(uniqueId))
+        buttons = append(buttons, files[0].Process(inputMessage.GetChat().Id, bot.Username, _app.Config)...)
+        buttons = append(buttons, footerRow(uniqueId, 0, len(files)))
+    }
 
 	text := format.KeyValueFormat(_app.Config.GetResultTemplate(), _app.BasicMessageValues(ctx, map[string]any{"query": query, "warn": warn}))
 

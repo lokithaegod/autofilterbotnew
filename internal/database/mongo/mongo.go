@@ -7,6 +7,7 @@ import (
 
 	"github.com/Jisin0/autofilterbot/internal/database"
 	"github.com/Jisin0/autofilterbot/internal/model"
+ "go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -178,4 +179,9 @@ func (c *Client) UpdateStorageCollection(index int) error {
 // WARNING: The document count of the collection does not essentially represent the storage usage of the database but the logic depends on the assumption that files will be by far the heaviest collection.
 func (c *Client) RunCollectionUpdater(ctx context.Context, log *zap.Logger) {
 	go c.fileCollection.RunCollectionUpdater(ctx, log)
+}
+
+// Ping verifies that the primary Atlas connection can accept database commands.
+func (c *Client) Ping(ctx context.Context) error {
+ return c.client.Ping(ctx,readpref.Primary())
 }

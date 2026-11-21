@@ -22,6 +22,7 @@ var adminBotCommands = append(append([]gotgbot.BotCommand{},publicBotCommands...
  gotgbot.BotCommand{Command:"admin",Description:"Open my private admin menu"},
  gotgbot.BotCommand{Command:"dashboard",Description:"Private admin dashboard"},
  gotgbot.BotCommand{Command:"alive",Description:"Check uptime and bot status"},
+ gotgbot.BotCommand{Command:"health",Description:"Test MongoDB and Telegram API health"},
  gotgbot.BotCommand{Command:"stats",Description:"Private bot usage statistics"},
  gotgbot.BotCommand{Command:"settings",Description:"Manage bot settings and Force Sub"},
  gotgbot.BotCommand{Command:"index",Description:"Index channel files"},
@@ -63,6 +64,7 @@ func AdminMenu(bot *gotgbot.Bot,ctx *ext.Context) error {
  keyboard:=gotgbot.InlineKeyboardMarkup{InlineKeyboard:[][]gotgbot.InlineKeyboardButton{
   {{Text:"📊 Dashboard",CallbackData:"admenu|dashboard"},{Text:"💓 Alive",CallbackData:"admenu|alive"}},
   {{Text:"📈 Stats",CallbackData:"admenu|stats"},{Text:"⚙️ Settings",CallbackData:"admenu|settings"}},
+  {{Text:"🩺 Health details",CallbackData:"admenu|health"}},
   {{Text:"📥 Index help",CallbackData:"admenu|index"},{Text:"📣 Broadcast help",CallbackData:"admenu|broadcast"}},
  }}
  _,err:=bot.SendMessage(ctx.EffectiveChat.Id,msg,&gotgbot.SendMessageOpts{ReplyMarkup:keyboard})
@@ -88,6 +90,9 @@ func AdminMenuCallback(bot *gotgbot.Bot,ctx *ext.Context) error {
   return err
  case "admenu|stats":
   return sendPrivateStats(bot,c.From.Id)
+ case "admenu|health":
+  _,err:=bot.SendMessage(c.From.Id,"🩺 Send /health to check Telegram API and MongoDB connectivity.",nil)
+  return err
  case "admenu|settings":
   _,err:=bot.SendMessage(c.From.Id,"⚙️ Send /settings here to open the interactive admin panel.",nil)
   return err

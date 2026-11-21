@@ -63,6 +63,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCommand("dashboard", AdminDashboard), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("admin", AdminMenu), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("alive", Alive), commandHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewCommand("health", HealthCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("find", AdvancedFind), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("browse", BrowseFiles), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("movie", MovieInfo), commandHandlerGroup)
@@ -90,6 +91,8 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("admenu"), AdminMenuCallback), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("index"), CbIndex), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("flt"), FilterSearch), callbackQueryGroup)
+	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("cards"), MovieCardCallback), callbackQueryGroup)
+	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("card"), MovieCardCallback), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("browse"), BrowseCallback), callbackQueryGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(exthandlers.ChatIds(env.Int64s("FILE_CHANNELS")), NewFile), miscHandlerGroup)

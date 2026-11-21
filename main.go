@@ -1,30 +1,25 @@
 package main
 
 import (
-    "log"
-    "net/http"
-    "os"
+ "log"
+ "net/http"
+ "os"
 
-    "github.com/Jisin0/autofilterbot/cmd"
+ "github.com/Jisin0/autofilterbot/cmd"
+ "github.com/Jisin0/autofilterbot/internal/core"
 )
 
-// Render web services require an HTTP listener. The bot still receives
-// Telegram updates using long polling.
+// Keep the existing public URL compatible with UptimeRobot and GitHub checks,
+// but return 503 if the bot, database, or Telegram API are not healthy.
 func main() {
-    port := os.Getenv("PORT")
-    if port != "" {
-        mux := http.NewServeMux()
-        mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-            w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-            w.WriteHeader(http.StatusOK)
-            _, _ = w.Write([]byte("Telegram bot process is running"))
-        })
-        go func() {
-            log.Printf("Starting HTTP listener on port %s", port)
-            if err := http.ListenAndServe(":"+port, mux); err != nil {
-                log.Printf("Health listener stopped: %v", err)
-            }
-        }()
-    }
-    cmd.Execute()
+ if port:=os.Getenv("PORT");port!="" {
+  mux:=http.NewServeMux()
+  mux.HandleFunc("/",core.HealthHTTP)
+  mux.HandleFunc("/healthz",core.HealthHTTP)
+  go func(){
+   log.Printf("Starting HTTP listener on port %s",port)
+   if err:=http.ListenAndServe(":"+port,mux);err!=nil {log.Printf("Health listener stopped: %v",err)}
+  }()
+ }
+ cmd.Execute()
 }
