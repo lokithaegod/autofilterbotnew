@@ -63,6 +63,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCommand("dashboard", AdminDashboard), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("admin", AdminMenu), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("alive", Alive), commandHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewCommand("health", HealthCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("find", AdvancedFind), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("browse", BrowseFiles), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("movie", MovieInfo), commandHandlerGroup)
