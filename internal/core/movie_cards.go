@@ -98,6 +98,7 @@ func cardLabel(c movieCard) string {
 
 func cardsCallback(id string,page int)string{return fmt.Sprintf("cards|%s_%d",id,page)}
 func cardCallback(id string,index,page int)string{return fmt.Sprintf("card|%s_%d_%d",id,index,page)}
+func cardModeCallback(id string,index,page int,kind string)string{return fmt.Sprintf("card|%s_%d_%d_%s",id,index,page,kind)}
 
 func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.InlineKeyboardButton {
  const perPage=6
@@ -125,16 +126,30 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
  return keyboard
 }
 
-func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,username string) [][]gotgbot.InlineKeyboardButton {
+func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,username,kind string) [][]gotgbot.InlineKeyboardButton {
  var keyboard [][]gotgbot.InlineKeyboardButton
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:cardLabel(card),CallbackData:"ignore"}})
  if card.MalayalamSubs>0 {
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"✅ Malayalam subtitle file available",CallbackData:"ignore"}})
  }
  all:=make(autofilter.Files,0,len(card.Videos)+len(card.Subs)+len(card.Other))
- all=append(all,card.Videos...)
- all=append(all,card.Subs...)
- all=append(all,card.Other...)
+ if kind=="msub" {
+  for _,f:=range card.Subs {if isMalayalamSubtitle(f.FileName){all=append(all,f)}}
+ }else{
+  all=append(all,card.Videos...)
+  all=append(all,card.Subs...)
+  all=append(all,card.Other...)
+ }
+ var modeRow []gotgbot.InlineKeyboardButton
+ allLabel:="🎬 All Files"
+ if kind=="all"{allLabel="✅ "+allLabel}
+ modeRow=append(modeRow,gotgbot.InlineKeyboardButton{Text:allLabel,CallbackData:cardModeCallback(id,index,0,"all")})
+ if card.MalayalamSubs>0 {
+  subLabel:="📜 Malayalam Subs"
+  if kind=="msub"{subLabel="✅ "+subLabel}
+  modeRow=append(modeRow,gotgbot.InlineKeyboardButton{Text:subLabel,CallbackData:cardModeCallback(id,index,0,"msub")})
+ }
+ keyboard=append(keyboard,modeRow)
  const perPage=7
  maxPages:=(len(all)+perPage-1)/perPage
  if maxPages==0{maxPages=1}
@@ -146,11 +161,11 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  // Each file uses the pre-existing /start deep link, including Force Sub.
  keyboard=append(keyboard,all[start:end].Process(chatID,username,_app.Config)...)
  var nav []gotgbot.InlineKeyboardButton
- if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardCallback(id,index,page-1)})}
+ if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardModeCallback(id,index,page-1,kind)})}
  nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d options",page+1,maxPages,len(all)),CallbackData:"ignore"})
- if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:cardCallback(id,index,page+1)})}
+ if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:cardModeCallback(id,index,page+1,kind)})}
  keyboard=append(keyboard,nav)
- keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,0)}})
+ keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}})
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file results",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return keyboard
 }
@@ -160,6 +175,7 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  data:=callbackdata.FromString(c.Data)
  expected:=2
  if data.Path[0]=="card"{expected=3}
+ if data.Path[0]=="card"&&len(data.Args)==4{expected=4}
  if len(data.Args)!=expected {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid card",ShowAlert:true});return nil}
  result,ok,err:=_app.Cache.Autofilter.Get(data.Args[0])
  if err!=nil||!ok {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Search expired. Search again.",ShowAlert:true});return nil}
@@ -167,13 +183,18 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  blocked,err:=_app.DB.IsUserBlocked(c.From.Id)
  if err!=nil||blocked{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Access unavailable",ShowAlert:true});return nil}
  cards:=buildMovieCards(result.Files)
- page,err:=strconv.Atoi(data.Args[expected-1])
+ pageIndex:=expected-1
+ if data.Path[0]=="card"{pageIndex=2}
+ page,err:=strconv.Atoi(data.Args[pageIndex])
  if err!=nil||page<0 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid page",ShowAlert:true});return nil}
  var keyboard [][]gotgbot.InlineKeyboardButton
  if data.Path[0]=="card"{
   index,err:=strconv.Atoi(data.Args[1])
   if err!=nil||index<0||index>=len(cards){_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Movie not found",ShowAlert:true});return nil}
-  keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username)
+  kind:="all"
+  if expected==4 {kind=data.Args[3]}
+  if kind!="all"&&kind!="msub"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
+  keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind)
  }else{
   if page>=(len(cards)+5)/6 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Page not found",ShowAlert:true});return nil}
   keyboard=movieCardsKeyboard(result.UniqueId,cards,page)
