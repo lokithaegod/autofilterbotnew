@@ -172,6 +172,9 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		})
 	}
 
+	// Present recognized series episodes in season/episode order across pages.
+	autofilter.SortEpisodes(files)
+
 	var warn string
 	if _app.Config.GetAutodeleteTime() != 0 {
 		warn = fmt.Sprintf("<blockquote><b>⚠️ 𝖳𝗁𝗂𝗌 𝖬𝖾𝗌𝗌𝖺𝗀𝖾 𝖶𝗂𝗅𝗅 𝖡𝖾 𝖠𝗎𝗍𝗈𝗆𝖺𝗍𝗂𝖼𝖺𝗅𝗅𝗒 𝖣𝖾𝗅𝖾𝗍𝖾𝖽 𝖨𝗇 %d 𝖬𝗂𝗇𝗎𝗍𝖾𝗌</b></blockquote>", _app.Config.AutodeleteTime)
