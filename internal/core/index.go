@@ -139,7 +139,7 @@ func CmdIndex(bot *gotgbot.Bot, ctx *ext.Context) error {
 		ID:                    functions.RandString(6),
 		StartMessageID:        startId,
 		EndMessageID:          endId,
-		CurrentMessageID:      startId,
+		CurrentMessageID:      startId - 1,
 		ChannelID:             channelId,
 		ProgressMessageChatID: progressMessage.Chat.Id,
 		// ProgressMessageID:     progressMessage.MessageId,

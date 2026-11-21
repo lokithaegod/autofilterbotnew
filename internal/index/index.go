@@ -34,6 +34,7 @@ type Operation struct {
 
 	// for accurate calculation of ETA
 
+	saveErrors       bool
 	startTime        time.Time // time at which this intance of operation was started/resumed
 	startMessageID   int64     // msg id at which this intance of operation started/resumed
 	mtprotoChannelID int64
@@ -66,7 +67,7 @@ func (o *Operation) run(ctx context.Context) {
 	// updates the progress msg to a basic start msg, also doubles as a check if the msg exists and can be edited
 	startText := fmt.Sprintf("index from %d at %d to %d ...", o.StartMessageID, o.CurrentMessageID, o.EndMessageID)
 
-	if o.CurrentMessageID == o.StartMessageID {
+	if o.CurrentMessageID <= o.StartMessageID {
 		startText = "Starting " + startText
 	} else {
 		startText = "Resuming " + startText
@@ -155,7 +156,7 @@ func (o *Operation) run(ctx context.Context) {
 		return
 	}
 
-	msgChan := make(chan []telegram.Message, defaultBatchSize) // allows to queue one full chunk, may cause inaccuracy in saved value in completed progress
+	msgChan := make(chan indexBatch, 1) // allows to queue one full chunk, may cause inaccuracy in saved value in completed progress
 
 	go o.MessageProcessor(ctx, msgChan)
 
@@ -224,10 +225,17 @@ func (o *Operation) run(ctx context.Context) {
 		default:
 			// check if end reached
 			if o.CurrentMessageID >= o.EndMessageID {
-				o.completedSignal <- 1
+				// Every queued message is processed before a successful checkpoint is recorded.
+                if !o.saveErrors {
+                    if err := o.db.AdvanceIndexCheckpoint(o.ChannelID, o.EndMessageID); err != nil {
+                        o.log.Error("index: failed to advance checkpoint", zap.Error(err))
+                        o.saveErrors = true
+                    }
+                }
+                o.completedSignal <- 1
 
-				b := o.buildProgressMessage()
-				b.WriteString("\n<b>Index Operation Completed 🎉</b>")
+                b := o.buildProgressMessage()
+				if o.saveErrors { b.WriteString("\n<b>Index scan finished with storage errors. Checkpoint NOT advanced; retry indexing.</b>") } else { b.WriteString("\n<b>Index Operation Completed 🎉</b>") }
 
 				_, _, err := progressM.EditText(o.bot, b.String(), &gotgbot.EditMessageTextOpts{
 					ParseMode: gotgbot.ParseModeHTML,
@@ -297,7 +305,15 @@ func (o *Operation) run(ctx context.Context) {
 
 			}
 
-			msgChan <- msgs
+			done := make(chan struct{})
+			select {
+			case msgChan <- indexBatch{messages: msgs, done: done}:
+			case <-ctx.Done(): return
+			}
+			select {
+			case <-done:
+			case <-ctx.Done(): return
+			}
 			o.CurrentMessageID = int64(messageChunk[len(messageChunk)-1].(*telegram.InputMessageID).ID) // sets current id to that of last msg in chunk
 		}
 	}

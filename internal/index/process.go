@@ -12,10 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func (o *Operation) MessageProcessor(ctx context.Context, c chan []telegram.Message) {
+type indexBatch struct { messages []telegram.Message; done chan struct{} }
+
+func (o *Operation) MessageProcessor(ctx context.Context, c chan indexBatch) {
 	for {
 		select {
-		case msgs := <-c:
+		case batch := <-c:
+			msgs := batch.messages
 			o.log.Debug("index: msgs to save received", zap.String("pid", o.ID), zap.Int("length", len(msgs)))
 
 			for _, m := range msgs {
@@ -118,12 +121,14 @@ func (o *Operation) MessageProcessor(ctx context.Context, c chan []telegram.Mess
 					}
 
 					o.Failed++
+					if _, duplicate := err.(database.FileAlreadyExistsError); !duplicate { o.saveErrors = true }
 
 					continue
 				}
 
 				o.Saved++
 			}
+			close(batch.done)
 		case <-ctx.Done():
 			return
 		case <-o.completedSignal:

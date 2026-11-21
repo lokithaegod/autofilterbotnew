@@ -65,6 +65,10 @@ type Database interface {
 	// GetName returns the name of the database as a user friendly string.
 	GetName() string
 
+	// GetIndexCheckpoint returns the last fully scanned message for a channel.
+	GetIndexCheckpoint(channelID int64) (int64, error)
+	AdvanceIndexCheckpoint(channelID, last int64) error
+
 	// NewIndexOperation inserts a new index operation into the collection.
 	NewIndexOperation(i *model.Index) error
 	// UpdateIndexOperation updates an index operation.
