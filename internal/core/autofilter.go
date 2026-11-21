@@ -10,11 +10,21 @@ import (
 	"github.com/Jisin0/autofilterbot/internal/button"
 	"github.com/Jisin0/autofilterbot/internal/format"
 	"github.com/Jisin0/autofilterbot/internal/functions"
+	"github.com/Jisin0/autofilterbot/pkg/conversation"
 	"github.com/Jisin0/autofilterbot/pkg/callbackdata"
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"go.uber.org/zap"
 )
+
+// PrivateAutofilter provides the same search experience in direct messages as in groups.
+// Replies to active admin setup conversations must not be treated as filenames.
+func PrivateAutofilter(bot *gotgbot.Bot, ctx *ext.Context) error {
+	if ctx.Message == nil || ctx.Message.From == nil || conversation.ActiveListeners.HasMatch(ctx.Message) {
+		return nil
+	}
+	return Autofilter(bot, ctx)
+}
 
 func Autofilter(bot *gotgbot.Bot, ctx *ext.Context) error {
 	msg, err := _autofilter(bot, ctx)
@@ -92,7 +102,7 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 			return nil, nil
 		}
 
-		if autofilter.IsBadQuery(text, m.Entities) {
+		if autofilter.IsBadQueryWithLimit(text, m.Entities, func() int { if m.Chat.Type == "private" { return 120 }; return 30 }()) {
 			_app.Log.Debug("autofilter: bad query", zap.String("text", text), zap.Any("entities", m.Entities))
 			return nil, nil
 		}
