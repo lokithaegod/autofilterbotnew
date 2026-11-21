@@ -21,3 +21,22 @@ func TestQualityAndLanguage(t *testing.T) {
  pages:=[]autofilter.Files{{{File:model.File{FileName:"A.720p.Tamil.mkv"}},{File:model.File{FileName:"B.1080p.English.mkv"}}}}
  if got:=matchingFiles(pages,"720p","tam");len(got)!=1||got[0].FileName!="A.720p.Tamil.mkv"{t.Fatalf("unexpected filter result: %#v",got)}
 }
+
+func TestSeasonFilterAndOrder(t *testing.T) {
+ makeFile:=func(name string) autofilter.File{return autofilter.File{File:model.File{FileName:name}}}
+ pages:=[]autofilter.Files{
+  {makeFile("Ted.Lasso.S04E02.1080p.mkv"),makeFile("Ted.Lasso.S01E10.720p.mkv")},
+  {makeFile("Ted.Lasso.S01E02.1080p.mkv"),makeFile("Ted.Lasso.S02E01.720p.mkv"),makeFile("Ted.Lasso.S01E01.720p.mkv")},
+ }
+ autofilter.SortEpisodes(pages)
+ seasons:=availableSeasons(pages)
+ if len(seasons)!=3||seasons[0]!=1||seasons[1]!=2||seasons[2]!=4 {t.Fatalf("seasons: %v",seasons)}
+ all:=matchingSeasonFiles(pages,"all","all","all")
+ if len(all)!=5||all[0].FileName!="Ted.Lasso.S01E01.720p.mkv"||all[1].FileName!="Ted.Lasso.S01E02.1080p.mkv"{t.Fatalf("unexpected order: %+v",all)}
+ seasonOne:=matchingSeasonFiles(pages,"all","all","1")
+ if len(seasonOne)!=3 {t.Fatalf("expected 3 season one versions; got %d",len(seasonOne))}
+ seasonOneHD:=matchingSeasonFiles(pages,"1080p","all","1")
+ if len(seasonOneHD)!=1||seasonOneHD[0].FileName!="Ted.Lasso.S01E02.1080p.mkv"{t.Fatalf("bad combined filter: %+v",seasonOneHD)}
+ noSeason:=matchingSeasonFiles(pages,"all","all","3")
+ if len(noSeason)!=0{t.Fatalf("missing season should be empty")}
+}
