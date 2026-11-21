@@ -81,7 +81,7 @@ func filenameSearchPattern(query string) string {
 func (c *Client) SearchFiles(query string) (database.Cursor, error) {
     pattern := filenameSearchPattern(query)
     filter := bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: pattern}}}}
-    return c.fileCollection.Find(context.Background(), filter, options.Find().SetSort(bson.M{"time": -1}).SetLimit(50))
+    return c.fileCollection.Find(context.Background(), filter, options.Find().SetSort(bson.M{"time": -1}).SetLimit(500))
 }
 
 // fileIdFilter creates a bson filter to match by file_id.
