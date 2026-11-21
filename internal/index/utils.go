@@ -22,7 +22,7 @@ func (o *Operation) inputMessageSlice() []telegram.InputMessage {
 
 	ids := make([]telegram.InputMessage, 0)
 
-	for i := 0; i <= getMessagesLimit; i++ {
+	for i := 1; i <= getMessagesLimit; i++ {
 		id := o.CurrentMessageID + int64(i)
 		if id > o.EndMessageID {
 			break
