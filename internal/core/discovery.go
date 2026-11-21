@@ -150,17 +150,20 @@ func BrowseCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  return sendCatalog(bot,c.From.Id,strings.ToUpper(cat),files)
 }
 
-func AdminDashboard(bot *gotgbot.Bot,ctx *ext.Context)error{
- if !_app.AuthAdmin(ctx){return nil}
+func adminDashboardReply(bot *gotgbot.Bot, chatID int64) error {
  stats,err:=_app.DB.Stats()
  if err!=nil{return err}
  top,err:=_app.DB.TopSearches(8)
  if err!=nil{return err}
- text:=fmt.Sprintf("📊 Admin Dashboard\nUsers: %d\nGroups: %d\nFiles: %s\n\nPopular searches:",stats.Users,stats.Groups,stats.Files)
- if len(top)==0{text+="\nNo searches recorded yet."}
- for i,t:=range top {text+=fmt.Sprintf("\n%d. %s — %d",i+1,t.Query,t.Count)}
- _,err=ctx.Message.Reply(bot,text,nil)
+ msg:=fmt.Sprintf("📊 Admin Dashboard\nUsers: %d\nGroups: %d\nFiles: %s\n\nPopular searches:",stats.Users,stats.Groups,stats.Files)
+ if len(top)==0{msg+="\nNo searches recorded yet."}
+ for i,item:=range top {msg+=fmt.Sprintf("\n%d. %s — %d",i+1,item.Query,item.Count)}
+ _,err=bot.SendMessage(chatID,msg,nil)
  return err
+}
+func AdminDashboard(bot *gotgbot.Bot,ctx *ext.Context)error{
+ if !privateAdminOnly(bot,ctx){return nil}
+ return adminDashboardReply(bot,ctx.EffectiveChat.Id)
 }
 
 func SetBan(bot *gotgbot.Bot,ctx *ext.Context)error{
