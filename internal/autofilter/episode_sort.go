@@ -86,3 +86,10 @@ func SortModelEpisodes(files []model.File) {
   return false
  })
 }
+
+// SeasonNumber returns the parsed season for a standard episode filename.
+// The bool is false for movies, files without episode markers, and malformed names.
+func SeasonNumber(name string) (int, bool) {
+ key:=parseEpisode(name)
+ return key.season,key.valid
+}
