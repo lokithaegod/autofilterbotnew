@@ -141,6 +141,8 @@ func Run(opts RunAppOptions) {
 	_app.additionalURLsCount = len(additionalUri)
 	_app.ConfigPanel = configpanel.CreatePanel(_app)
 
+	registerBotCommands(bot, _app.Admins, logger)
+
 	dispatcher := SetupDispatcher(logger)
 	updater := ext.NewUpdater(dispatcher, &ext.UpdaterOpts{
 		UnhandledErrFunc: func(err error) {
