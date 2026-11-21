@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"time"
+ "sync/atomic"
 
 	"github.com/Jisin0/autofilterbot/internal/app"
 	"github.com/Jisin0/autofilterbot/internal/cache"
@@ -29,6 +30,7 @@ type Core struct {
 	Ctx context.Context
 
 	additionalURLsCount int
+ pollingStarted atomic.Bool
 }
 
 // extendedHandler returns a handlers.Response that calls
@@ -163,7 +165,8 @@ func Run(opts RunAppOptions) {
 		)
 	}
 
-	logger.Info(fmt.Sprintf("@%s started successfully !", bot.Username))
+	_app.pollingStarted.Store(true)
+ logger.Info(fmt.Sprintf("@%s started successfully !", bot.Username))
 
 	go _app.RestartActiveIndexOperations(ctx)
 
@@ -177,7 +180,8 @@ func Run(opts RunAppOptions) {
 	s := <-c // wait until an interrupt signal is received
 	logger.Info("stopping app: interrupt signal received", zap.Any("signal", s))
 
-	updater.Stop()
+	_app.pollingStarted.Store(false)
+ updater.Stop()
 
 	cancel() // autodelete & mongo updater should stop with this
 	_app.DB.Shutdown()
