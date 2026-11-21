@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+ "strings"
 	"strconv"
 	"time"
 
@@ -117,6 +118,10 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		return nil, nil
 	}
 
+	if ctx.Message != nil {
+        if !CheckSearchAccess(bot,ctx) {return nil,nil}
+        _ = _app.DB.LogSearch(query)
+    }
 	cursor, err := _app.DB.SearchFiles(query)
 	if err != nil {
 		_app.Log.Warn("autofilter: search files failed", zap.Error(err))
@@ -140,6 +145,20 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 	}
 
 	if len(files) == 0 {
+        suggestions, suggestErr := SuggestTitles(query)
+        if suggestErr == nil && len(suggestions)>0 {
+            var hints []string
+            var keyboard [][]gotgbot.InlineKeyboardButton
+            for _,name:=range suggestions {
+                hints=append(hints,"• "+name)
+                keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📋 "+name,CopyText:&gotgbot.CopyTextButton{Text:name}}})
+            }
+            text:="🔎 No exact match. Did you mean?\n"+strings.Join(hints,"\n")+"\nTap to copy and search again."
+            return bot.SendMessage(inputMessage.GetChat().Id,text,&gotgbot.SendMessageOpts{
+                ReplyParameters:&gotgbot.ReplyParameters{MessageId:inputMessage.GetMessageId()},
+                ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:keyboard},
+            })
+        }
 		vals := _app.BasicMessageValues(ctx, map[string]any{"query": query})
 		return bot.SendMessage(inputMessage.GetChat().Id, format.KeyValueFormat(_app.Config.GetNoResultText(), vals), &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
