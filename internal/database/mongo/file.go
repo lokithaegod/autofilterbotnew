@@ -21,7 +21,7 @@ func (c *Client) SaveFile(f *model.File) error {
 
 	// Find a document that starts with the same file_name and is within a 100 byte range of file_size
 	duplicateFilter := bson.D{
-		{Key: "file_name", Value: bson.D{{Key: "$regex", Value: "^" + f.FileName}}},
+		{Key: "file_name", Value: bson.D{{Key: "$regex", Value: "^" + regexp.QuoteMeta(f.FileName) + "$"}}},
 		{Key: "file_size", Value: bson.D{
 			{Key: "$gte", Value: f.FileSize - 100},
 			{Key: "$lte", Value: f.FileSize + 100},
