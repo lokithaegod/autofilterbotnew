@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/Jisin0/autofilterbot/internal/database"
@@ -66,11 +67,21 @@ func (c *Client) DeleteFile(fileId string) error {
 	return err
 }
 
-func (c *Client) SearchFiles(query string) (database.Cursor, error) {
-	pattern := `(?i)(\b|[\.\+\-_])` + strings.ReplaceAll(query, " ", `.*[\s\.\+\-_]`) + `(\b|[\.\+\-_])`
-	pipeline := bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: pattern}}}}
+// filenameSearchPattern makes natural text searches match separator-heavy filenames.
+// It tolerates joined words (TimeIn), dots, spaces, hyphens, and underscores.
+// Tokens are escaped to keep search input as text rather than regex syntax.
+func filenameSearchPattern(query string) string {
+    words := strings.Fields(strings.ToLower(query))
+    if len(words) == 0 {return "^$"}
+    if len(words) > 20 {words = words[:20]}
+    for i,w := range words {words[i] = regexp.QuoteMeta(w)}
+    return "(?i)(^|[^a-z0-9])" + strings.Join(words, "[^a-z0-9]*") + "($|[^a-z0-9])"
+}
 
-	return c.fileCollection.Find(context.Background(), pipeline, options.Find().SetSort(bson.M{"time": -1}).SetLimit(50))
+func (c *Client) SearchFiles(query string) (database.Cursor, error) {
+    pattern := filenameSearchPattern(query)
+    filter := bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: pattern}}}}
+    return c.fileCollection.Find(context.Background(), filter, options.Find().SetSort(bson.M{"time": -1}).SetLimit(50))
 }
 
 // fileIdFilter creates a bson filter to match by file_id.
