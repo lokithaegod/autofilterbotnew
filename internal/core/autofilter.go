@@ -133,7 +133,7 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		})
 	}
 
-	files, err := autofilter.FilesFromCursor(context.Background(), cursor, _app.Config)
+	files, err := autofilter.FilesFromCursor(context.Background(), cursor, fullSeriesSearchOptions{perPage: _app.Config.GetMaxPerPage()},)
 	if err != nil {
 		_app.Log.Warn("autofilter: files from cursor failed", zap.Error(err))
 		return bot.SendMessage(inputMessage.GetChat().Id, "<i>Processing Results Failed 🤖</i>", &gotgbot.SendMessageOpts{
@@ -216,6 +216,13 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 
 	return msg, nil
 }
+
+// The DB fetches up to 500 matches so earlier seasons aren't lost to newest-first
+// limits. Sorting happens before pagination; this is a bounded result window.
+type fullSeriesSearchOptions struct { perPage int }
+func (o fullSeriesSearchOptions) GetMaxResults() int { return 500 }
+func (o fullSeriesSearchOptions) GetMaxPerPage() int { if o.perPage<=0 || o.perPage>20 {return 10};return o.perPage }
+func (o fullSeriesSearchOptions) GetMaxPages() int { return 500/o.GetMaxPerPage() }
 
 func headerRow(uniqueId string, pageIndex int) []gotgbot.InlineKeyboardButton {
 	return []gotgbot.InlineKeyboardButton{allButton(uniqueId, pageIndex), selectButton(uniqueId, pageIndex)}
