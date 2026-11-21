@@ -126,7 +126,7 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
  return keyboard
 }
 
-func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,username,kind string) [][]gotgbot.InlineKeyboardButton {
+func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,username,kind string,opts autofilter.ProcessFilesOptions) [][]gotgbot.InlineKeyboardButton {
  var keyboard [][]gotgbot.InlineKeyboardButton
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:cardLabel(card),CallbackData:"ignore"}})
  if card.MalayalamSubs>0 {
@@ -159,7 +159,7 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  end:=start+perPage
  if end>len(all){end=len(all)}
  // Each file uses the pre-existing /start deep link, including Force Sub.
- keyboard=append(keyboard,all[start:end].Process(chatID,username,_app.Config)...)
+ keyboard=append(keyboard,all[start:end].Process(chatID,username,opts)...)
  var nav []gotgbot.InlineKeyboardButton
  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardModeCallback(id,index,page-1,kind)})}
  nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d options",page+1,maxPages,len(all)),CallbackData:"ignore"})
@@ -194,7 +194,7 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
   kind:="all"
   if expected==4 {kind=data.Args[3]}
   if kind!="all"&&kind!="msub"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
-  keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind)
+  keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind,_app.Config)
  }else{
   if page>=(len(cards)+5)/6 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Page not found",ShowAlert:true});return nil}
   keyboard=movieCardsKeyboard(result.UniqueId,cards,page)
