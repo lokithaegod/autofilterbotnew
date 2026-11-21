@@ -121,6 +121,7 @@ func (o *Operation) MessageProcessor(ctx context.Context, c chan indexBatch) {
 					}
 
 					o.Failed++
+					if _, duplicate := err.(database.FileAlreadyExistsError); !duplicate { o.saveErrors = true }
 
 					continue
 				}
