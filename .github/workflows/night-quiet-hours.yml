@@ -1,0 +1,34 @@
+name: AutoFilterMG Night Quiet Hours
+
+on:
+  schedule:
+    # Every 15 minutes; 01:02 and 07:02 IST are the first target runs.
+    # Retry every 15 minutes in case GitHub delays a scheduled run.
+    - cron: "2,17,32,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autofiltermg-night-scheduler
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Pause or resume Render and UptimeRobot (IST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply scheduled state only if both API secrets exist
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          UPTIMEROBOT_API_KEY: ${{ secrets.UPTIMEROBOT_API_KEY }}
+        run: python3 scripts/night_schedule.py
+
+# SETUP REQUIRED: Add both repository Actions secrets:
+#   RENDER_API_KEY       Render account API token
+#   UPTIMEROBOT_API_KEY  UptimeRobot account-level API token
+# Never put API tokens in the repository, workflow inputs, or chat.
+# Without both secrets every run is a no-op; the production bot is unchanged.
