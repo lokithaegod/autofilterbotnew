@@ -34,6 +34,8 @@ func parseEpisode(name string) episodeKey {
  if err1!=nil||err2!=nil||episode==0 {return episodeKey{}}
  title:=strings.TrimSpace(titleDivider.ReplaceAllString(lower[:loc[0]]," "))
  if title=="" {return episodeKey{}}
+ // Only the exact three-letter series code is a verified alias for Fringe.
+ if title=="fri"{title="fringe"}
  return episodeKey{title:title,season:season,episode:episode,valid:true}
 }
 
