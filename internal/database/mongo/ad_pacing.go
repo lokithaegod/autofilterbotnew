@@ -6,9 +6,11 @@ import (
  "crypto/sha256"
  "encoding/hex"
  "strconv"
+ "sync"
  "time"
 
  "go.mongodb.org/mongo-driver/bson"
+ "go.mongodb.org/mongo-driver/mongo"
  "go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -40,4 +42,17 @@ func (c *Client) AdPacingStep(userID int64, salt string) (bool,error) {
   bson.M{"$set":bson.M{"last_sent":now,"searches":0}})
  if err!=nil{return false,err}
  return res.ModifiedCount==1,nil
+}
+
+var adsPacingIndex=struct{sync.Mutex; ready bool}{}
+func ensureAdsPacingIndex(ctx context.Context,col *mongo.Collection)error{
+ adsPacingIndex.Lock()
+ defer adsPacingIndex.Unlock()
+ if adsPacingIndex.ready{return nil}
+ _,err:=col.Indexes().CreateOne(ctx,mongo.IndexModel{
+  Keys:bson.D{{Key:"expires_at",Value:1}},
+  Options:options.Index().SetExpireAfterSeconds(0),
+ })
+ if err==nil{adsPacingIndex.ready=true}
+ return err
 }
