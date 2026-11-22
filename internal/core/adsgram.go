@@ -56,6 +56,10 @@ func cleanAdCreative(ad adsgramCreative)(adsgramCreative,error){
 }
 
 func fetchAdsGramAd(ctx context.Context,userID int64,language string,client *http.Client)(adsgramCreative,error){
+ return fetchAdsGramAdFrom(ctx,userID,language,client,adsgramAPI)
+}
+
+func fetchAdsGramAdFrom(ctx context.Context,userID int64,language string,client *http.Client,endpoint string)(adsgramCreative,error){
  var empty adsgramCreative
  blockID:=strings.TrimPrefix(os.Getenv("ADSGRAM_BLOCK_ID"),"bot-")
  if _,err:=strconv.ParseUint(blockID,10,64);err!=nil{return empty,errors.New("invalid AdsGram block ID")}
@@ -65,7 +69,7 @@ func fetchAdsGramAd(ctx context.Context,userID int64,language string,client *htt
  params.Set("blockid",blockID)
  params.Set("language",language)
  params.Set("token",os.Getenv("ADSGRAM_TOKEN"))
- req,err:=http.NewRequestWithContext(ctx,http.MethodGet,adsgramAPI+"?"+params.Encode(),nil)
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,endpoint+"?"+params.Encode(),nil)
  if err!=nil{return empty,err}
  resp,err:=client.Do(req)
  if err!=nil{return empty,err}
