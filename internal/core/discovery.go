@@ -7,7 +7,6 @@ import (
  "net/http"
  "io"
  "regexp"
- "sort"
  "net/url"
  "os"
  "strconv"
@@ -238,30 +237,3 @@ func normalizeTitle(s string)string{
  return strings.Join(strings.Fields(s)," ")
 }
 
-func SuggestTitles(query string) ([]string,error) {
- candidates,err:=_app.DB.CatalogFiles(mongo.CatalogFilter{Sort:"newest"},100)
- if err!=nil{return nil,err}
- q:=normalizeTitle(query)
- if q==""{return nil,nil}
- type match struct{text string;score int}
- matches:=make([]match,0,10)
- seen:=map[string]bool{}
- for _,file:=range candidates {
-  normalized:=normalizeTitle(file.FileName)
-  words:=strings.Fields(normalized)
-  // Compare to the title prefix rather than full codec, rip, and file extension.
-  if len(words)>6{words=words[:6]}
-  title:=strings.Join(words," ")
-  if title==""||seen[title]{continue}
-  seen[title]=true
-  score:=fuzzyDistance(q,title)
-  if strings.Contains(title,q)||strings.Contains(q,title){score=0}
-  // Accept reasonably close matches, not unrelated files.
-  tolerance:=len([]rune(q))/3+2
-  if score<=tolerance {matches=append(matches,match{title,score})}
- }
- sort.Slice(matches,func(i,j int)bool{return matches[i].score<matches[j].score})
- var out []string
- for i:=0;i<len(matches)&&i<3;i++{out=append(out,matches[i].text)}
- return out,nil
-}
