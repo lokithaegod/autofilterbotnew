@@ -20,7 +20,18 @@ jobs:
     timeout-minutes: 3
     steps:
       - name: Check HTTP response
+        env:
+          QUIET_HOURS_ACTIVE: ${{ secrets.RENDER_API_KEY != '' && secrets.UPTIMEROBOT_API_KEY != '' }}
         run: |
+          # Only skip overnight checks after BOTH automation secrets exist.
+          # Otherwise preserve the previous always-on monitoring behavior.
+          if [ "$QUIET_HOURS_ACTIVE" = "true" ]; then
+            hour="$(TZ=Asia/Kolkata date +%H)"
+            if [ "$hour" -ge 1 ] && [ "$hour" -lt 7 ]; then
+              echo "Scheduled off-hours: skip HTTP request (01:00–07:00 IST)."
+              exit 0
+            fi
+          fi
           curl --fail --silent --show-error --location \
             --retry 2 --retry-delay 5 \
             --connect-timeout 15 --max-time 90 \

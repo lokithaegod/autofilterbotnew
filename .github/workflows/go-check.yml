@@ -19,3 +19,7 @@ jobs:
         run: go test ./internal/core ./internal/autofilter
       - name: Compile bot
         run: go build ./...
+      - name: Validate nightly schedule safely
+        run: |
+          python3 -m py_compile scripts/night_schedule.py
+          python3 -m unittest discover -s scripts -p "test_night_schedule.py" -v
