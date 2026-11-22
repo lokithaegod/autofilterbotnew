@@ -11,7 +11,15 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-// Only render the verified Fringe abbreviation as a readable title.\n// The original indexed filename and file ID remain unchanged.\nvar fringeShortName = regexp.MustCompile(`(?i)^fri([._ -]+s[0-9]{1,2}[ ._-]*e[0-9]{1,3}(?:[^a-z0-9]|$))`)\nfunc displayFileName(name string) string {\n if fringeShortName.MatchString(name){return "Fringe"+name[3:]}\n return name\n}\n\ntype Files []File
+// Only render the verified Fringe abbreviation as a readable title.
+// The indexed filename and Telegram file ID remain unchanged.
+var fringeShortName = regexp.MustCompile(`(?i)^fri([._ -]+s[0-9]{1,2}[ ._-]*e[0-9]{1,3}(?:[^a-z0-9]|$))`)
+func displayFileName(name string) string {
+ if fringeShortName.MatchString(name) {return "Fringe"+name[3:]}
+ return name
+}
+
+type Files []File
 
 // File wraps model.File with some search result specific data.
 type File struct {
