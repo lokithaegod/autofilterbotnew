@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"fmt"
- "strings"
 	"strconv"
 	"time"
 
@@ -57,6 +56,26 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 
 		// callback data structure: af:<query>_<user_id>
 		callbackData := callbackdata.FromString(c.Data)
+        if len(callbackData.Path)>0 && callbackData.Path[0]=="sug" {
+            // Suggestions always re-run the existing search path so movie cards,
+            // season sorting, file delivery and Force Sub behave unchanged.
+            suggested,ok:=suggestionFromCallback(c.Data,c.From.Id,c.Message.GetChat().Id)
+            if !ok {
+                _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Suggestion expired or unavailable. Search again.",ShowAlert:true})
+                return nil,nil
+            }
+            blocked,e:=_app.DB.IsUserBlocked(c.From.Id)
+            if e!=nil||blocked||!SearchAllowed(c.From.Id){
+                _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Search temporarily unavailable.",ShowAlert:true})
+                return nil,nil
+            }
+            _,_=c.Answer(bot,nil)
+            query=suggested
+            inputMessage=c.Message
+            fromUser=&c.From
+            _=_app.DB.LogSearch(query)
+            break
+        }
 		if len(callbackData.Args) < 2 {
 			_, err := c.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{
 				Text:      "Malformed Query: Not Enough Arguments",
@@ -147,16 +166,11 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 	if len(files) == 0 {
         suggestions, suggestErr := SuggestTitles(query)
         if suggestErr == nil && len(suggestions)>0 {
-            var hints []string
-            var keyboard [][]gotgbot.InlineKeyboardButton
-            for _,name:=range suggestions {
-                hints=append(hints,"• "+name)
-                keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📋 "+name,CopyText:&gotgbot.CopyTextButton{Text:name}}})
-            }
-            text:="🔎 No exact match. Did you mean?\n"+strings.Join(hints,"\n")+"\nTap to copy and search again."
+            token:=saveSuggestionSession(fromUser.Id,inputMessage.GetChat().Id,suggestions)
+            text:="🔎 No exact match for “"+query+"”.\nDid you mean one of these? Tap to search:"
             return bot.SendMessage(inputMessage.GetChat().Id,text,&gotgbot.SendMessageOpts{
                 ReplyParameters:&gotgbot.ReplyParameters{MessageId:inputMessage.GetMessageId()},
-                ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:keyboard},
+                ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:suggestionButtons(token,suggestions)},
             })
         }
 		vals := _app.BasicMessageValues(ctx, map[string]any{"query": query})
