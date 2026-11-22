@@ -16,6 +16,7 @@ func main() {
   mux:=http.NewServeMux()
   mux.HandleFunc("/",core.HealthHTTP)
   mux.HandleFunc("/healthz",core.HealthHTTP)
+  mux.HandleFunc("/ads/reward",core.AdsGramRewardHTTP)
   go func(){
    log.Printf("Starting HTTP listener on port %s",port)
    if err:=http.ListenAndServe(":"+port,mux);err!=nil {log.Printf("Health listener stopped: %v",err)}
