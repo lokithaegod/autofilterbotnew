@@ -91,9 +91,7 @@ func fetchAdsGramAdFrom(ctx context.Context,userID int64,language string,client 
 // settings, and sends ads only to the requesting user in a private Telegram chat.
 func maybeSendAdsGram(bot *gotgbot.Bot,ctx *ext.Context,userID int64){
  if !adsGramEnabled()||ctx==nil||ctx.Message==nil||ctx.Message.Chat.Type!="private"||userID<=0{return}
- pacing,ok:=_app.DB.(interface{AdPacingStep(int64,string)(bool,error)})
- if !ok{return}
- eligible,err:=pacing.AdPacingStep(userID,os.Getenv("ADSGRAM_PACING_SALT"))
+ eligible,err:=_app.DB.AdPacingStep(userID,os.Getenv("ADSGRAM_PACING_SALT"))
  if err!=nil {
   _app.Log.Warn("adsgram: pacing unavailable",zap.Error(err));return
  }
