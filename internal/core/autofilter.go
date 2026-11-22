@@ -223,6 +223,10 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		_app.Log.Warn("autofilter: send result failed", zap.Error(err))
 	}
 
+	if err == nil && msg != nil && ctx.Message != nil && ctx.Message.Chat.Type == "private" {
+		maybeSendAdsGram(bot,ctx,fromUser.Id)
+	}
+
 	err = _app.Cache.Autofilter.Save(&autofilter.SearchResult{
 		UniqueId: uniqueId,
 		Query:    query,
