@@ -78,10 +78,27 @@ func filenameSearchPattern(query string) string {
     return "(?i)(^|[^a-z0-9])" + strings.Join(words, "[^a-z0-9]*") + "($|[^a-z0-9])"
 }
 
+// Fringe episodes have both "fri.s01e01..." and "Fringe.S04E13..."
+// names. The alias is intentionally limited to the short episode prefix.
+var fringeAlias = regexp.MustCompile(`(?i)^fringe(?:[ ._-]+s([0-9]{1,2})[ ._-]*e([0-9]{1,3}))?$`)
+
+func fileSearchFilter(query string) bson.D {
+ original := bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: filenameSearchPattern(query)}}}}
+ parts := fringeAlias.FindStringSubmatch(strings.TrimSpace(query))
+ if parts==nil {return original}
+ alias := `(?i)^fri[._ -]*s[0-9]{1,2}[ ._-]*e[0-9]{1,3}(?:[^a-z0-9]|$)`
+ if parts[1]!="" {
+  alias = "(?i)^fri[._ -]*s" + regexp.QuoteMeta(parts[1]) + "[ ._-]*e" + regexp.QuoteMeta(parts[2]) + "(?:[^a-z0-9]|$)"
+ }
+ return bson.D{{Key: "$or", Value: bson.A{
+  original,
+  bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: alias}}}},
+ }}}
+}
+
 func (c *Client) SearchFiles(query string) (database.Cursor, error) {
-    pattern := filenameSearchPattern(query)
-    filter := bson.D{{Key: "file_name", Value: bson.D{{Key: "$regex", Value: pattern}}}}
-    return c.fileCollection.Find(context.Background(), filter, options.Find().SetSort(bson.M{"time": -1}).SetLimit(500))
+    return c.fileCollection.Find(context.Background(), fileSearchFilter(query),
+      options.Find().SetSort(bson.M{"time": -1}).SetLimit(500))
 }
 
 // fileIdFilter creates a bson filter to match by file_id.
