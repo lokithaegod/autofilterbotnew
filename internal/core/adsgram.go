@@ -69,7 +69,12 @@ func fetchAdsGramAdFrom(ctx context.Context,userID int64,language string,client 
  params.Set("blockid",blockID)
  params.Set("language",language)
  params.Set("token",os.Getenv("ADSGRAM_TOKEN"))
- req,err:=http.NewRequestWithContext(ctx,http.MethodGet,endpoint+"?"+params.Encode(),nil)
+ base,err:=url.Parse(endpoint)
+ if err!=nil{return empty,err}
+ existing:=base.Query()
+ for k,vs:=range params {existing.Set(k,vs[0])}
+ base.RawQuery=existing.Encode()
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,base.String(),nil)
  if err!=nil{return empty,err}
  resp,err:=client.Do(req)
  if err!=nil{return empty,err}
