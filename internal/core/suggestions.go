@@ -2,6 +2,7 @@ package core
 
 import (
  "sort"
+ "regexp"
  "strings"
  "sync"
  "time"
@@ -33,6 +34,8 @@ type suggestionSession struct {
  Titles []suggestedTitle
  Expires time.Time
 }
+
+var suggestionEpisode=regexp.MustCompile(`(?i)(?:[._ -]+s[0-9]{1,2}[ ._-]*e[0-9]{1,3}|[._ -]+[0-9]{1,2}x[0-9]{1,3})(?:[^a-z0-9]|$)`)
 
 func episodeSuggestionTitle(name string) string {
  // Recognizes "Show.S01E02" and "Show.1x02" without including episode names.
@@ -68,7 +71,7 @@ func uniqueTitlesFromFilenames(files []string)[]suggestedTitle{
  for _,filename:=range files{
   c,ok:=titleCandidate(filename)
   if !ok {continue}
-  key:=c.Normal+"|"+strings.TrimSpace(strings.TrimPrefix(c.Label,strings.TrimSuffix(c.Label," ("+extractYear(c.Label)+")")))
+  key:=c.Normal
   // Prefer a year-specific key for movies; deduplicate series.
   if yr:=extractYear(c.Label);yr!=""{key=c.Normal+"|"+yr}else{key=c.Normal}
   if seen[key]{continue}
