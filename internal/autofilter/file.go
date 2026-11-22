@@ -2,6 +2,7 @@ package autofilter
 
 import (
 	"fmt"
+ "regexp"
 
 	"github.com/Jisin0/autofilterbot/internal/format"
 	"github.com/Jisin0/autofilterbot/internal/functions"
@@ -10,7 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-type Files []File
+// Only render the verified Fringe abbreviation as a readable title.\n// The original indexed filename and file ID remain unchanged.\nvar fringeShortName = regexp.MustCompile(`(?i)^fri([._ -]+s[0-9]{1,2}[ ._-]*e[0-9]{1,3}(?:[^a-z0-9]|$))`)\nfunc displayFileName(name string) string {\n if fringeShortName.MatchString(name){return "Fringe"+name[3:]}\n return name\n}\n\ntype Files []File
 
 // File wraps model.File with some search result specific data.
 type File struct {
@@ -44,12 +45,13 @@ func ProcessFiles(files Files, chatId int64, botUsername string, opts ProcessFil
 			HasShortener: hasShortener,
 		}.Encode())
 		size := functions.FileSizeToString(f.FileSize)
+        displayName:=displayFileName(f.FileName)
 
 		if opts.GetSizeButton() {
-			result = append(result, []gotgbot.InlineKeyboardButton{{Text: f.FileName, CallbackData: "fdetails|" + f.UniqueId}, {Text: size, Url: url}})
+			result = append(result, []gotgbot.InlineKeyboardButton{{Text: displayName, CallbackData: "fdetails|" + f.UniqueId}, {Text: size, Url: url}})
 		} else {
 			text := format.KeyValueFormat(opts.GetButtonTemplate(), map[string]string{
-				"file_name": f.FileName,
+				"file_name": displayName,
 				"file_size": size,
 			})
 			result = append(result, []gotgbot.InlineKeyboardButton{{Text: text, Url: url}})
@@ -65,7 +67,7 @@ func (files Files) SelectMenu(uniqueId string, pageIndex int) [][]gotgbot.Inline
 
 	for _, f := range files {
 		keyboard = append(keyboard, []gotgbot.InlineKeyboardButton{{
-			Text:         fmt.Sprintf("%s[%s] %s", tick(f.IsSelected), functions.FileSizeToString(f.FileSize), f.FileName),
+			Text:         fmt.Sprintf("%s[%s] %s", tick(f.IsSelected), functions.FileSizeToString(f.FileSize), displayFileName(f.FileName)),
 			CallbackData: fmt.Sprintf("sel|%s_%d_%s", uniqueId, pageIndex, f.UniqueId),
 		}})
 	}
