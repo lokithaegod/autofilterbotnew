@@ -9,6 +9,9 @@ on:
       - "internal/subtitles/**"
       - "internal/core/**"
       - "internal/database/**"
+      - "internal/compatfinder/**"
+      - "scripts/compatibility_probe.py"
+      - "scripts/test_compatibility_probe.py"
 
 permissions:
   contents: read
@@ -23,7 +26,13 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
+      - name: Test video identity and edition matching
+        run: go test ./internal/compatfinder
       - name: Test subtitle parsing
         run: go test ./internal/subtitles
+      - name: Test read-only audio verification logic
+        run: |
+          python3 -m py_compile scripts/compatibility_probe.py
+          python3 -m unittest discover -s scripts -p test_compatibility_probe.py -v
       - name: Compile affected application packages
         run: go test ./internal/core ./internal/database/mongo -run '^$'
