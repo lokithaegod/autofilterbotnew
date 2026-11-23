@@ -28,3 +28,36 @@
 ## Technical tests
 `go test ./internal/subtitles`
 `go test ./internal/core ./internal/database/mongo -run '^$'`
+
+## Release-aware subtitle ranking
+
+When a user opens the Malayalam Subtitle button from a movie card, the bot
+compares subtitle filenames with the video filenames in that particular movie
+card. It recognizes the following tags when explicitly present:
+
+- Source: BluRay, WEB-DL, WEBRip, HDTV, DVDRip
+- Resolution: 480p, 720p, 1080p, 2160p
+- Release group: explicit final `-GROUP` suffix
+- FPS: explicit `23.976fps`, `24fps`, `25fps`, `29.970fps`, etc.
+
+Subtitle choices are sorted as **Likely release match**, **Possible release
+match**, **Release unverified**, and **Different release**. Conflicting options
+remain visible with a warning rather than being silently hidden.
+
+For example:
+- Video: `The.Descent.2005.1080p.BluRay-GROUP.mkv`
+- Subtitle: `The.Descent.2005.Malayalam.1080p.BluRay-GROUP.srt`
+
+If only `/subtitles The Descent 2005` is entered without selecting a movie
+card, the bot has no specific video version to compare. All results correctly
+show **Release unverified**.
+
+Subtitle metadata is written to the independent `MalayalamSubtitles`
+collection for new channel posts; older records can still be parsed from their
+stored filenames. No existing movie files are rewritten.
+
+**Caution:** Release-name matching cannot prove synchronization, correct
+dialogue or subtitle language. FPS, source labels and release groups are
+optional and must not be guessed. Subtitle authors may use inconsistent names.
+Actual timing validation would require inspecting the video/subtitle streams
+or letting the user report compatibility.
