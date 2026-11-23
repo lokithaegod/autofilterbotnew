@@ -4,7 +4,6 @@ package database
 import (
 	"github.com/Jisin0/autofilterbot/internal/config"
 	"github.com/Jisin0/autofilterbot/internal/model"
- "github.com/Jisin0/autofilterbot/internal/subtitles"
 )
 
 const (
@@ -48,12 +47,6 @@ type Database interface {
 	DeleteFile(fileId string) error
 	// SearchFiles searches for files in the database by their name. The query should be sanitized first.
 	SearchFiles(query string) (Cursor, error)
-
-	// Malayalam subtitles are isolated from the movie file collection.
- SaveSubtitle(entry *subtitles.Entry) error
- SearchSubtitles(key, year string) ([]*subtitles.Entry, error)
- SubtitleExists(key, year string) (bool, error)
- GetSubtitle(id string) (*subtitles.Entry, error)
 
 	// SaveGroup inserts a group id into the database to keep track of them.
 	SaveGroup(id int64) error
