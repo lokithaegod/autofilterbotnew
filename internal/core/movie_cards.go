@@ -8,7 +8,6 @@ import (
  "unicode/utf8"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
- "github.com/Jisin0/autofilterbot/internal/subtitles"
  "github.com/Jisin0/autofilterbot/pkg/callbackdata"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -93,7 +92,7 @@ func cardLabel(c movieCard) string {
  title:=c.Title
  if c.Year!="" {title+=" ("+c.Year+")"}
  label:="🎬 "+clippedLabel(title,37)
- if c.MalayalamSubs>0 {label+=" ✅📜"}
+
  return label
 }
 
@@ -118,9 +117,7 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
   count:=len(card.Videos)+len(card.Subs)+len(card.Other)
   label:=fmt.Sprintf("%s • %d files",cardLabel(card),count)
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:clippedLabel(label,75),CallbackData:cardCallback(id,i,0)}})
-  if movieSubtitleAvailable(card) {
-   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,i)}})
-  }
+
  }
  var nav []gotgbot.InlineKeyboardButton
  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardsCallback(id,page-1)})}
@@ -133,12 +130,6 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
 func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,username,kind string,opts autofilter.ProcessFilesOptions) [][]gotgbot.InlineKeyboardButton {
  var keyboard [][]gotgbot.InlineKeyboardButton
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:cardLabel(card),CallbackData:"ignore"}})
- if card.MalayalamSubs>0 {
-  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"✅ Malayalam subtitle file available",CallbackData:"ignore"}})
- }
- if movieSubtitleAvailable(card) {
-  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Download Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,index)}})
- }
  // Keep caption-based manual claims separate from audio-verified matches.
  // Only files within this movie card are inspected, and the original file
  // collection and file-delivery buttons remain unchanged.
@@ -166,8 +157,6 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  }
  all:=make(autofilter.Files,0,len(card.Videos)+len(card.Subs)+len(card.Other))
  switch kind{
- case "msub":
-  for _,f:=range card.Subs {if isMalayalamSubtitle(f.FileName){all=append(all,f)}}
  case "tagged":
   all=append(all,captionTagged...)
  case "other":
@@ -181,11 +170,6 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  allLabel:="🎬 All Files"
  if kind=="all"{allLabel="✅ "+allLabel}
  modeRow=append(modeRow,gotgbot.InlineKeyboardButton{Text:allLabel,CallbackData:cardModeCallback(id,index,0,"all")})
- if card.MalayalamSubs>0 {
-  subLabel:="📜 Malayalam Subs"
-  if kind=="msub"{subLabel="✅ "+subLabel}
-  modeRow=append(modeRow,gotgbot.InlineKeyboardButton{Text:subLabel,CallbackData:cardModeCallback(id,index,0,"msub")})
- }
  keyboard=append(keyboard,modeRow)
  const perPage=7
  maxPages:=(len(all)+perPage-1)/perPage
@@ -243,7 +227,7 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
   if err!=nil||index<0||index>=len(cards){_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Movie not found",ShowAlert:true});return nil}
   kind:="all"
   if expected==4 {kind=data.Args[3]}
-  if kind!="all"&&kind!="msub"&&kind!="tagged"&&kind!="other"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
+  if kind!="all"&&kind!="tagged"&&kind!="other"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
   keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind,_app.Config)
  }else{
   if page>=(len(cards)+5)/6 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Page not found",ShowAlert:true});return nil}
@@ -255,9 +239,3 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  return nil
 }
 
-// Subtitle availability is queried from the independent collection; movie records are not changed.
-func movieSubtitleAvailable(card movieCard)bool{
- if card.Year=="" || _app==nil || _app.DB==nil{return false}
- available,err:=_app.DB.SubtitleExists(subtitles.Normalize(card.Title),card.Year)
- return err==nil&&available
-}
