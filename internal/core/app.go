@@ -155,7 +155,7 @@ func Run(opts RunAppOptions) {
 	err = updater.StartPolling(bot, &ext.PollingOpts{
 		DropPendingUpdates: true,
 		GetUpdatesOpts: &gotgbot.GetUpdatesOpts{
-			AllowedUpdates: []string{"message", "channel_post", "inline_query", "chosen_inline_result", "callback_query", "chat_join_request"},
+			AllowedUpdates: []string{"message", "channel_post", "edited_channel_post", "inline_query", "chosen_inline_result", "callback_query", "chat_join_request"},
 		},
 	})
 	if err != nil {
