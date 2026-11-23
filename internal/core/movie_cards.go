@@ -136,9 +136,10 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  // Keep caption-based manual claims separate from audio-verified matches.
  // Only files within this movie card are inspected, and the original file
  // collection and file-delivery buttons remain unchanged.
- movieFiles:=make(autofilter.Files,0,len(card.Videos)+len(card.Other))
+ movieFiles:=make(autofilter.Files,0,len(card.Videos)+len(card.Other)+len(card.Subs))
  movieFiles=append(movieFiles,card.Videos...)
  movieFiles=append(movieFiles,card.Other...)
+ movieFiles=append(movieFiles,card.Subs...)
  ids:=make([]string,0,len(movieFiles))
  for _,f:=range movieFiles {ids=append(ids,f.UniqueId)}
  tagged:=make(map[string]bool)
@@ -156,7 +157,15 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  captionTagged:=make(autofilter.Files,0)
  captionOther:=make(autofilter.Files,0)
  for _,f:=range movieFiles{
-  if tagged[f.UniqueId] {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+  // A Malayalam SRT is a downloadable subtitle document, not a video claim.
+  // Videos are suitable only when the owner added the explicit caption tag.
+  if isSubtitleFile(f.FileName) {
+   if isMalayalamSubtitle(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+  } else if tagged[f.UniqueId] {
+   captionTagged=append(captionTagged,f)
+  } else {
+   captionOther=append(captionOther,f)
+  }
  }
  all:=make(autofilter.Files,0,len(card.Videos)+len(card.Subs)+len(card.Other))
  switch kind{
