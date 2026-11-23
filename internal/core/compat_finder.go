@@ -56,6 +56,10 @@ func downloadSelectedSRT(bot *gotgbot.Bot,fileID string)(string,error){
 }
 
 type compatProbeResult struct {
+ Video struct {
+  Runtime float64 `json:"duration_seconds"`
+  FPS *float64 `json:"fps"`
+ } `json:"video"`
  Status string `json:"status"`
  Reason string `json:"reason"`
  Confidence string `json:"confidence"`
@@ -134,6 +138,11 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID s
   line:="• "+display+" — "+reason
   if probe.Status=="verified"||probe.Status=="needs_sync"{
    line+=fmt.Sprintf(" (offset %.2fs, drift %.2fs)",probe.Offset,probe.Drift)
+  }
+  if probe.Video.Runtime>0{
+   line+=fmt.Sprintf(" [runtime %.0fs",probe.Video.Runtime)
+   if probe.Video.FPS!=nil{line+=fmt.Sprintf(", %.3f FPS",*probe.Video.FPS)}
+   line+="]"
   }
   groups[status]=append(groups[status],line)
  }
