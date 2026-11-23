@@ -79,3 +79,29 @@ func TestMovieCategoryChoiceButtons(t *testing.T) {
  for _,row:=range other{for _,button:=range row{if button.Text=="↩️ File categories"{hasBack=true}}}
  if !hasBack{t.Fatalf("missing return to file categories: %+v",other)}
 }
+
+func TestCastAwayBrandedFilesGroupIntoOneCard(t *testing.T) {
+ pages:=[]autofilter.Files{
+  {mockFile("[CC].Cast.Away.2000.720p.BRRip.HEVC.mkv"),
+   mockFile("[CC].Cast.Away.2000.1080p.BRRip.HEVC.mkv")},
+  {mockFile("[CC].Cast.Away.2000.720p.BrRip.x264.YIFY.mp4"),
+   mockFile("@moviezday.Cast.Away.2000.720p.BluRay.mp4")},
+ }
+ cards:=buildMovieCards(pages)
+ if len(cards)!=1 {t.Fatalf("all Cast Away (2000) releases must form one card: %+v",cards)}
+ card:=cards[0]
+ if card.Title!="Cast Away" || card.Year!="2000" {t.Fatalf("incorrect film identity: %+v",card)}
+ if files:=len(card.Videos)+len(card.Other)+len(card.Subs);files!=4 {
+  t.Fatalf("expected four original movie files in merged card, got %d",files)
+ }
+ for _,name:=range []string{
+  "@moviezday.Cast.Away.2000.720p.BluRay.mp4",
+  "@moviezday Cast Away (2000) 1080p.mkv",
+  "[CC].Cast.Away.2000.720p.BRRip.HEVC.mkv",
+ } {
+  title,year,key,ok:=titleFromFilename(name)
+  if !ok||title!="Cast Away"||year!="2000"||key!="cast away|2000" {
+   t.Errorf("filename %q incorrectly parsed: %q %q %q %v",name,title,year,key,ok)
+  }
+ }
+}
