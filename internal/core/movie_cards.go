@@ -31,6 +31,14 @@ func isMalayalamSubtitleArchive(name string) bool {
  return strings.Contains(lower,"മലയാളം") || strings.Contains(lower,"malayalam")
 }
 
+// Malayalam section includes explicit owner tags, and Malayalam subtitle
+// files recognized by their filename. Forwarded SRT tags do not require
+// "Malayalam" to be written in the file name.
+func isManuallySuitableMalayalamFile(filename string, tagged bool) bool {
+ if tagged{return true}
+ return isMalayalamSubtitle(filename)||isMalayalamSubtitleArchive(filename)
+}
+
 type movieCard struct {
  Title string
  Year string
@@ -168,8 +176,10 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
   // A Malayalam SRT is a downloadable subtitle document, not a video claim.
   // Videos are suitable only when the owner added the explicit caption tag.
   if isSubtitleFile(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {
-   if isMalayalamSubtitle(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
-  } else if tagged[f.UniqueId] {
+   // Admin-forwarded SRTs may not say Malayalam in the original filename.
+   // An explicit owner tag takes precedence over filename heuristics.
+   if isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+  } else if isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]) {
    captionTagged=append(captionTagged,f)
   } else {
    captionOther=append(captionOther,f)
