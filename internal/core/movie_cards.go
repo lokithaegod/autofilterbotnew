@@ -8,6 +8,7 @@ import (
  "unicode/utf8"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/subtitles"
  "github.com/Jisin0/autofilterbot/pkg/callbackdata"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -117,6 +118,9 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
   count:=len(card.Videos)+len(card.Subs)+len(card.Other)
   label:=fmt.Sprintf("%s • %d files",cardLabel(card),count)
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:clippedLabel(label,75),CallbackData:cardCallback(id,i,0)}})
+  if movieSubtitleAvailable(card) {
+   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,i)}})
+  }
  }
  var nav []gotgbot.InlineKeyboardButton
  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardsCallback(id,page-1)})}
@@ -131,6 +135,9 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:cardLabel(card),CallbackData:"ignore"}})
  if card.MalayalamSubs>0 {
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"✅ Malayalam subtitle file available",CallbackData:"ignore"}})
+ }
+ if movieSubtitleAvailable(card) {
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Download Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,index)}})
  }
  all:=make(autofilter.Files,0,len(card.Videos)+len(card.Subs)+len(card.Other))
  if kind=="msub" {
@@ -203,4 +210,11 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  if err!=nil {_app.Log.Warn("movie cards: edit markup failed",zap.Error(err))}
  _,_=c.Answer(bot,nil)
  return nil
+}
+
+// Subtitle availability is queried from the independent collection; movie records are not changed.
+func movieSubtitleAvailable(card movieCard)bool{
+ if card.Year==""{return false}
+ available,err:=_app.DB.SubtitleExists(subtitles.Normalize(card.Title),card.Year)
+ return err==nil&&available
 }
