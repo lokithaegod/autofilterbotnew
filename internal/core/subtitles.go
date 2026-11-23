@@ -23,11 +23,13 @@ func NewSubtitle(bot *gotgbot.Bot, ctx *ext.Context) error {
    zap.String("filename",m.Document.FileName))
   return nil
  }
+ release:=subtitles.ReleaseFromFilename(m.Document.FileName)
  entry:=&subtitles.Entry{
   UniqueID:m.Document.FileUniqueId,
   FileID:m.Document.FileId,
   FileName:m.Document.FileName,
   Title:title,TitleKey:key,Year:year,
+  ReleaseType:release.Type, Resolution:release.Resolution, ReleaseGroup:release.Group, FPS:release.FPS,
   Size:m.Document.FileSize,
   ChatID:m.Chat.Id,MessageID:m.MessageId,
  }
@@ -62,7 +64,7 @@ func SubtitlesCommand(bot *gotgbot.Bot,ctx *ext.Context)error{
  return sendSubtitleResults(bot,ctx.EffectiveChat.Id,ctx.Message.From.Id,key,year)
 }
 
-func sendSubtitleResults(bot *gotgbot.Bot,chatID,userID int64,key,year string)error{
+func sendSubtitleResults(bot *gotgbot.Bot,chatID,userID int64,key,year string, videoFiles ...string)error{
  if key=="" {_,err:=bot.SendMessage(chatID,"Please provide a movie title.",nil);return err}
  entries,err:=_app.DB.SearchSubtitles(key,year)
  if err!=nil{return err}
@@ -71,16 +73,25 @@ func sendSubtitleResults(bot *gotgbot.Bot,chatID,userID int64,key,year string)er
   return err
  }
  rows:=make([][]gotgbot.InlineKeyboardButton,0,len(entries))
- for _,entry:=range entries {
+ ranked:=subtitles.Rank(entries,videoFiles)
+ for _,candidate:=range ranked {
+  entry:=candidate.Entry
   // FileUniqueId may contain underscores; split the callback at the last underscore.
   data:=fmt.Sprintf("msend|%s_%d",entry.UniqueID,userID)
   if len(data)>64 {continue}
   label:=entry.FileName
   if len([]rune(label))>55 {label=string([]rune(label)[:52])+"..."}
-  rows=append(rows,[]gotgbot.InlineKeyboardButton{{Text:"📜 "+label,CallbackData:data}})
+  marker:="📜 "
+  switch candidate.Level {
+  case "likely":marker="✅ Likely release match · "
+  case "possible":marker="🟡 Possible release match · "
+  case "different":marker="⚠️ Different release · "
+  default:marker="❔ Release unverified · "
+  }
+  rows=append(rows,[]gotgbot.InlineKeyboardButton{{Text:marker+label,CallbackData:data}})
  }
  if len(rows)==0{return fmt.Errorf("subtitle callbacks exceed Telegram's 64 byte limit")}
- _,err=bot.SendMessage(chatID,fmt.Sprintf("📜 Malayalam subtitles (%d result(s))",len(rows)),
+ _,err=bot.SendMessage(chatID,fmt.Sprintf("📜 Malayalam subtitles (%d result(s))\nRelease matching uses filenames only; timing compatibility is not guaranteed.",len(rows)),
   &gotgbot.SendMessageOpts{ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:rows}})
  return err
 }
@@ -131,5 +142,7 @@ func SubtitleMovieCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  card:=cards[index]
  if card.Year==""{return nil}
  _,_=c.Answer(bot,nil)
- return sendSubtitleResults(bot,c.Message.GetChat().Id,c.From.Id,subtitles.Normalize(card.Title),card.Year)
+ videoNames:=make([]string,0,len(card.Videos))
+ for _,video:=range card.Videos{videoNames=append(videoNames,video.FileName)}
+ return sendSubtitleResults(bot,c.Message.GetChat().Id,c.From.Id,subtitles.Normalize(card.Title),card.Year,videoNames...)
 }
