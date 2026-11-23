@@ -47,6 +47,35 @@ func TestMovieCardKeyboardAndPages(t *testing.T){
  if len(keyboard[1][0].CallbackData)>64{t.Fatal("callback data over Telegram's 64 byte limit")}
  detail:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","all",&config.Config{})
  if len(detail)<5 {t.Fatalf("caption-only cards must retain standard movie navigation: %+v",detail)}
- if !strings.Contains(detail[len(detail)-4][0].Text,"Malayalam Sub Available") {t.Fatalf("caption-only button missing: %+v",detail)}
- if !strings.Contains(detail[len(detail)-3][0].Text,"Other Files") {t.Fatalf("other files button missing: %+v",detail)}
+ if !strings.Contains(detail[1][0].Text,"Malayalam Sub Files") {t.Fatalf("caption-only button missing: %+v",detail)}
+ if !strings.Contains(detail[2][0].Text,"More Files") {t.Fatalf("more files button missing: %+v",detail)}
+ if len(detail)!=5 {t.Fatalf("movie card should show category choices before file links: %+v",detail)}
+}
+
+func TestSameMovieWithDifferentSourceChannelLabels(t *testing.T) {
+ pages:=[]autofilter.Files{
+  {mockFile("Inception.2010.1080p.BluRay.mkv"),mockFile("@CC Links Inception.2010.720p.BRRip.mp4")},
+  {mockFile("[CC].Inception.2010.720p.BluRay.mkv"),mockFile("Inception.2011.1080p.mkv")},
+ }
+ cards:=buildMovieCards(pages)
+ if len(cards)!=2{t.Fatalf("expected a single 2010 card, plus separate 2011 movie: %+v",cards)}
+ if cards[0].Title!="Inception"||cards[0].Year!="2010"{t.Fatalf("wrong canonical movie: %+v",cards[0])}
+ if total:=len(cards[0].Videos)+len(cards[0].Other)+len(cards[0].Subs);total!=3{t.Fatalf("merged card should contain 3 releases, got %d",total)}
+ if cards[1].Year!="2011"{t.Fatalf("different release year incorrectly merged: %+v",cards)}
+ for _,name:=range []string{"@CC Links Inception.2010.1080p.mkv","[CC].Inception.2010.720p.mkv"}{
+  title,year,key,ok:=titleFromFilename(name)
+  if !ok||title!="Inception"||year!="2010"||key!="inception|2010"{t.Errorf("bad title cleanup for %s: %q, %q, %q, %v",name,title,year,key,ok)}
+ }
+}
+
+func TestMovieCategoryChoiceButtons(t *testing.T) {
+ cards:=buildMovieCards([]autofilter.Files{{mockFile("Inception.2010.1080p.mkv")}})
+ menu:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","all",&config.Config{})
+ if len(menu)!=5 {t.Fatalf("only two category buttons and navigation should be visible: %+v",menu)}
+ if menu[1][0].CallbackData!="card|abcdefghijklmno_0_0_tagged" {t.Fatalf("tagged callback changed: %+v",menu[1])}
+ if menu[2][0].CallbackData!="card|abcdefghijklmno_0_0_other" {t.Fatalf("other callback changed: %+v",menu[2])}
+ other:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","other",&config.Config{})
+ hasBack:=false
+ for _,row:=range other{for _,button:=range row{if button.Text=="↩️ File categories"{hasBack=true}}}
+ if !hasBack{t.Fatalf("missing return to file categories: %+v",other)}
 }

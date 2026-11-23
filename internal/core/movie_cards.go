@@ -19,6 +19,9 @@ import (
 // card rather than being incorrectly attached to another film.
 var movieYear = regexp.MustCompile(`(?i)^(.+?)[ ._\-(\[]+((?:19|20)[0-9]{2})(?:[^0-9]|$)`)
 var movieWord = regexp.MustCompile(`[^a-z0-9]+`)
+// Strip known channel branding before the actual movie title. This avoids
+// duplicate cards for e.g. "Inception.2010" and "@CC Links Inception.2010".
+var movieLeadingCC = regexp.MustCompile(`(?i)^(?:[._ -]*\[cc\][._ -]*|[._ -]*@cc[._ -]*links[._ -]*|[._ -]*@cc_links[._ -]*)+`)
 
 type movieCard struct {
  Title string
@@ -34,7 +37,7 @@ func titleFromFilename(name string)(title,year,key string,ok bool){
  match:=movieYear.FindStringSubmatch(name)
  if len(match)!=3 {return "","","",false}
  // Drop initial file group labels such as [Group] for prettier titles.
- raw:=strings.TrimSpace(strings.Trim(match[1],"._- []()"))
+ raw:=strings.TrimSpace(strings.Trim(movieLeadingCC.ReplaceAllString(match[1],""),"._- []()"))
  words:=movieWord.ReplaceAllString(strings.ToLower(raw)," ")
  words=strings.Join(strings.Fields(words)," ")
  if words=="" {return "","","",false}
@@ -166,38 +169,34 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
   all=append(all,card.Subs...)
   all=append(all,card.Other...)
  }
- var modeRow []gotgbot.InlineKeyboardButton
- allLabel:="🎬 All Files"
- if kind=="all"{allLabel="✅ "+allLabel}
- modeRow=append(modeRow,gotgbot.InlineKeyboardButton{Text:allLabel,CallbackData:cardModeCallback(id,index,0,"all")})
- keyboard=append(keyboard,modeRow)
- const perPage=7
- maxPages:=(len(all)+perPage-1)/perPage
- if maxPages==0{maxPages=1}
- if page>=maxPages{page=maxPages-1}
- if page<0{page=0}
- start:=page*perPage
- end:=start+perPage
- if end>len(all){end=len(all)}
- // Each file uses the pre-existing /start deep link, including Force Sub.
- keyboard=append(keyboard,all[start:end].Process(chatID,username,opts)...)
- var nav []gotgbot.InlineKeyboardButton
- if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardModeCallback(id,index,page-1,kind)})}
- nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d options",page+1,maxPages,len(all)),CallbackData:"ignore"})
- if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:cardModeCallback(id,index,page+1,kind)})}
- keyboard=append(keyboard,nav)
- // These labels indicate user-provided captions, not verified audio timing.
- tagLabel:=fmt.Sprintf("✅ Malayalam Sub Available (%d)",len(captionTagged))
- otherLabel:=fmt.Sprintf("🎬 Other Files (%d)",len(captionOther))
- if kind=="tagged"{tagLabel="☑️ "+tagLabel}
- if kind=="other"{otherLabel="☑️ "+otherLabel}
- if tagErr==nil {
+ // Show only the two requested choices when a movie card is opened.
+ // Tagged videos are manually confirmed by captions, not by SRT timing analysis.
+ if kind=="all" {
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{
-   {Text:tagLabel,CallbackData:cardModeCallback(id,index,0,"tagged")},
+   {Text:fmt.Sprintf("✅ Malayalam Sub Files (%d)",len(captionTagged)),CallbackData:cardModeCallback(id,index,0,"tagged")},
   })
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{
-   {Text:otherLabel,CallbackData:cardModeCallback(id,index,0,"other")},
+   {Text:fmt.Sprintf("🎬 More Files (%d)",len(captionOther)),CallbackData:cardModeCallback(id,index,0,"other")},
   })
+ } else {
+  selected:="✅ Malayalam Sub Files"
+  if kind=="other"{selected="🎬 More Files"}
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:selected,CallbackData:"ignore"}})
+  const perPage=7
+  maxPages:=(len(all)+perPage-1)/perPage
+  if maxPages==0{maxPages=1}
+  if page>=maxPages{page=maxPages-1}
+  if page<0{page=0}
+  start:=page*perPage
+  end:=start+perPage
+  if end>len(all){end=len(all)}
+  keyboard=append(keyboard,all[start:end].Process(chatID,username,opts)...)
+  var nav []gotgbot.InlineKeyboardButton
+  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardModeCallback(id,index,page-1,kind)})}
+  nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d files",page+1,maxPages,len(all)),CallbackData:"ignore"})
+  if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:cardModeCallback(id,index,page+1,kind)})}
+  keyboard=append(keyboard,nav)
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ File categories",CallbackData:cardModeCallback(id,index,0,"all")}})
  }
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}})
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file results",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
