@@ -122,7 +122,11 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID,h
   selected=""
  }
  if selected!=""{defer os.Remove(selected)}
- groups:=map[string][]string{"verified":{},"needs_sync":{},"incompatible":{},"unverified":{}}
+ ids:=make([]string,0,len(videos))
+ for _,video:=range videos{ids=append(ids,video.UniqueId)}
+ manualTags,tagErr:=_app.DB.FindMalayalamCaptionTags(ids)
+ if tagErr!=nil{manualTags=map[string]bool{}}
+ groups:=map[string][]string{"verified":{},"needs_sync":{},"incompatible":{},"manual":{},"unverified":{}}
  const maxAudioChecks=12 // Bound expensive audio work in each user request.
  analyzed:=0
  for _,video:=range videos{
@@ -149,12 +153,17 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID,h
    if probe.Video.FPS!=nil{line+=fmt.Sprintf(", %.3f FPS",*probe.Video.FPS)}
    line+="]"
   }
+  if status=="unverified" && tagErr==nil && manualTags[video.UniqueId]{
+   status="manual"
+   line+=" [manual caption: Malayalam Sub; synchronization not verified]"
+  }
   groups[status]=append(groups[status],line)
  }
  sections:=[]struct{key,title string}{
   {"verified","✅ VERIFIED TIMING MATCHES"},
   {"needs_sync","⚠️ NEEDS SYNCHRONIZATION"},
   {"incompatible","❌ INCOMPATIBLE"},
+  {"manual","✅ MALAYALAM SUB AVAILABLE — MANUALLY TAGGED, NOT TIMING VERIFIED"},
   {"unverified","❔ OTHER FILES — NOT YET VERIFIED"},
  }
  title,year,_:=compatfinder.Identity(searchName)
@@ -162,6 +171,7 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID,h
   title,year,filename,len(videos),analyzed)
  if selected==""{header+="\nSubtitle content unavailable to analyzer: verification was not run.\n"}
  if manifestErr!=nil{header+="\nMedia manifest unavailable: verification disabled.\n"}
+ if tagErr!=nil{header+="\nCaption tags unavailable; manual labels not applied.\n"}
  _,err=bot.SendMessage(chatID,header,nil)
  if err!=nil{return err}
  for _,section:=range sections{
