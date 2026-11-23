@@ -144,5 +144,12 @@ func SubtitleMovieCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  _,_=c.Answer(bot,nil)
  videoNames:=make([]string,0,len(card.Videos))
  for _,video:=range card.Videos{videoNames=append(videoNames,video.FileName)}
+ // Some indexed video documents have their extension stripped during ingestion.
+ // Include non-subtitle movie file entries as release references in that case.
+ if len(videoNames)==0 {
+  for _,file:=range card.Other {
+   if !isSubtitleFile(file.FileName) && file.FileName!="" {videoNames=append(videoNames,file.FileName)}
+  }
+ }
  return sendSubtitleResults(bot,c.Message.GetChat().Id,c.From.Id,subtitles.Normalize(card.Title),card.Year,videoNames...)
 }
