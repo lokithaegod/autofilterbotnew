@@ -48,6 +48,17 @@ func NewFile(bot *gotgbot.Bot, ctx *ext.Context) error {
         }
     }
 
+    // Caption tags are separate overlays. A Tamil Dubbed caption on a newly
+    // indexed video can tag its existing ID without modifying movie records.
+    if isVideo && captiontags.IsTamilDubbedCaption(m.Caption) {
+        name:=file.FileName
+        size:=file.FileSize
+        if m.Document!=nil{name=m.Document.FileName;size=m.Document.FileSize} else if m.Video!=nil{name=m.Video.FileName;size=m.Video.FileSize}
+        if _,err:=_app.DB.SetTamilDubCaptionTagForMedia(file.UniqueId,name,size,true);err!=nil{
+            _app.Log.Warn("newfile: failed saving Tamil dubbed caption tag",zap.Error(err))
+        }
+    }
+
 	err := _app.DB.SaveFile(file)
 	if err != nil {
 		if _, ok := err.(database.FileAlreadyExistsError); ok {

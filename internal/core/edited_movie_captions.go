@@ -41,6 +41,13 @@ func EditedMovieCaption(bot *gotgbot.Bot,ctx *ext.Context)error{
   _app.Log.Warn("edited movie caption tag update failed",zap.Error(err))
   return err
  }
+ tamilEnabled:=captiontags.IsTamilDubbedCaption(m.Caption)
+ tamilLinked,tamilErr:=_app.DB.SetTamilDubCaptionTagForMedia(uniqueID,name,size,tamilEnabled)
+ if tamilErr!=nil{
+  _app.Log.Warn("edited movie Tamil Dubbed caption tag failed",zap.Error(tamilErr),zap.String("file_name",name))
+  return tamilErr
+ }
+ _app.Log.Info("edited movie Tamil Dubbed caption processed",zap.Int64("chat_id",m.Chat.Id),zap.String("file_name",name),zap.Bool("tamil_dubbed",tamilEnabled),zap.Int("linked_record_ids",tamilLinked))
  _app.Log.Info("edited movie caption tag processed",zap.Int64("chat_id",m.Chat.Id),zap.String("file_name",name),zap.Bool("malayalam_sub",enabled),zap.Int("linked_record_ids",linked))
  return nil
 }

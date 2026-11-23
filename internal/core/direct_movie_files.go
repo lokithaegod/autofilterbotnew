@@ -78,13 +78,17 @@ func sortDirectSubs(files autofilter.Files){
 // Preserve all remaining search results in the English section instead of
 // dropping files when removing the former Other/Unverified tab.
 func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)directMovieGroups {
+ return groupDirectMovieFilesWithTamil(pages,tagged,nil)
+}
+
+func groupDirectMovieFilesWithTamil(pages []autofilter.Files,tagged,tamilTagged map[string]bool)directMovieGroups {
  var g directMovieGroups
  for _,page:=range pages{for _,f:=range page{
   subtitle:=isMovieSubtitleDocument(f.FileName)
   switch{
   case isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]):
    if subtitle{g.MalayalamSubs=append(g.MalayalamSubs,f)}else{g.MalayalamVideos=append(g.MalayalamVideos,f)}
-  case (videoExtension.MatchString(f.FileName)||f.FileType=="video") && isTamilDubbedVideo(f.FileName):
+  case (videoExtension.MatchString(f.FileName)||f.FileType=="video") && (tamilTagged[f.UniqueId]||isTamilDubbedVideo(f.FileName)):
    g.TamilVideos=append(g.TamilVideos,f)
   default:
    if subtitle{g.EnglishSubs=append(g.EnglishSubs,f)}else{g.EnglishVideos=append(g.EnglishVideos,f)}
@@ -177,7 +181,9 @@ func directMovieGroupsFromDB(pages []autofilter.Files)(directMovieGroups,error){
  for _,p:=range pages{for _,f:=range p{ids=append(ids,f.UniqueId)}}
  tags,err:=_app.DB.FindMalayalamCaptionTags(ids)
  if err!=nil{return directMovieGroups{},err}
- return groupDirectMovieFiles(pages,tags),nil
+ tamilTags,err:=_app.DB.FindTamilDubCaptionTags(ids)
+ if err!=nil{return directMovieGroups{},err}
+ return groupDirectMovieFilesWithTamil(pages,tags,tamilTags),nil
 }
 
 // DirectFileCallback navigates a single result's inline language sections.

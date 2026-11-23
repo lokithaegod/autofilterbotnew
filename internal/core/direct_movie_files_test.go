@@ -149,3 +149,30 @@ func TestThreeGroupsNoOtherAndOwnerPrecedence(t *testing.T){
  old:=directFileKeyboard("abcdefghijklmno",groups,"other",0,123,"AutoFilterMGbot",&config.Config{})
  if !strings.Contains(old[0][0].Text,"English Sub Files"){t.Fatalf("old other callback should redirect to English: %+v",old)}
 }
+
+func TestCaptionTaggedTamilMovieGoesToTamilSection(t *testing.T){
+ pages:=[]autofilter.Files{{
+  testDirectFile("ta","Film.2020.720p.BluRay.mkv"),
+  testDirectFile("ml","Film.2020.1080p.BluRay.mkv"),
+  testDirectFile("both","Film.2020.480p.BluRay.mkv"),
+  testDirectFile("srt","Film.2020.Malayalam.srt"),
+  testDirectFile("en","Film.2020.720p.ENG.BluRay.mkv"),
+  testDirectFile("tafilename","Film.2020.1080p.Tamil.Dubbed.mkv"),
+ }}
+ groups:=groupDirectMovieFilesWithTamil(pages,
+  map[string]bool{"ml":true,"both":true},
+  map[string]bool{"ta":true,"both":true})
+ if len(groups.TamilVideos)!=2 || groups.TamilVideos[0].UniqueId!="ta" ||
+  groups.TamilVideos[1].UniqueId!="tafilename"{
+  t.Fatalf("caption-marked Tamil and filename-marked Tamil should group together: %+v",groups.TamilVideos)
+ }
+ if len(groups.malayalam())!=3{
+  t.Fatalf("Malayalam-approved files must keep priority, including both-tagged: %+v",groups.malayalam())
+ }
+ if len(groups.english())!=1 || groups.english()[0].UniqueId!="en"{
+  t.Fatalf("unmarked regular video should remain English: %+v",groups.english())
+ }
+ if strings.Contains(directFileKeyboard("abcdefghijklmno",groups,"ml",0,123,"AutoFilterMGbot",&config.Config{})[0][0].Text,"Tamil"){
+  t.Fatal("Malayalam result incorrectly labeled Tamil")
+ }
+}
