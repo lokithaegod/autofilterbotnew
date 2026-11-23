@@ -12,7 +12,7 @@ import (
 var yearPattern = regexp.MustCompile(`(?i)^(.+?)[ ._\-(\[]+((?:19|20)[0-9]{2})(?:[^0-9]|$)`)
 var words = regexp.MustCompile(`[^a-z0-9]+`)
 var fpsPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])((?:23[.]976|24[.]000|25[.]000|29[.]970|30[.]000|23|24|25|30|60))\s*fps(?:[^a-z]|$)`)
-var groupPattern = regexp.MustCompile(`(?i)(?:^|[._\s])(?:\[?yts(?:[.]ag|[.]mx)?\]?)(?:[._\s]|$)`)
+var groupPattern = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])\[?yts(?:[.]ag|[.]mx)?\]?(?:[^a-z0-9]|$)`)
 var trailingGroup = regexp.MustCompile(`(?i)-([a-z][a-z0-9]{1,19})$`)
 
 type Entry struct {
