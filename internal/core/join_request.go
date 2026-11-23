@@ -1,23 +1,21 @@
 package core
 
 import (
-	"github.com/PaulSonOfLars/gotgbot/v2"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"go.uber.org/zap"
+ "github.com/Jisin0/autofilterbot/internal/fsub"
+ "github.com/PaulSonOfLars/gotgbot/v2"
+ "github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
-// HandleJoinRequest handles join requests to force subsribe channels.
+// HandleJoinRequest records an anonymous event for configured ForceSub channels.
+// It must not record historical join requests as membership entitlements.
+// Telegram membership is checked live when the user requests a file.
 func HandleJoinRequest(bot *gotgbot.Bot, ctx *ext.Context) error {
-	update := ctx.ChatJoinRequest
-
-	// saves all join requests, not just from fsub channels
-
-	err := _app.DB.SaveUserJoinRequest(update.From.Id, update.Chat.Id)
-	if err != nil {
-		_app.Log.Warn("handlejoinrequest: failed to save join request to db", zap.Int64("user_id", update.From.Id), zap.Int64("chat_id", update.Chat.Id), zap.Error(err))
-	} else {
-		_app.Log.Debug("handlejoinrequest: saved join request sucessfully", zap.Int64("user_id", update.From.Id), zap.Int64("chat_id", update.Chat.Id))
-	}
-
-	return nil
+ if ctx.ChatJoinRequest==nil{return nil}
+ for _,channel:=range _app.Config.GetFsubChannels(){
+  if channel.ID==ctx.ChatJoinRequest.Chat.Id {
+   fsub.RecordJoinRequest()
+   break
+  }
+ }
+ return nil
 }
