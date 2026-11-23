@@ -144,12 +144,7 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 	case ctx.Message != nil:
   // Retain the original deep-link payload if one was supplied. Never index
   // Args()[1] on /start without an argument.
-  args := ctx.Args()
-  if len(args)>1 && args[1]!="" {
-   retryButton.Url=fmt.Sprintf("https://t.me/%s?start=%s",bot.Username,args[1])
-  } else {
-   retryButton.Url=fmt.Sprintf("https://t.me/%s?start",bot.Username)
-  }
+  retryButton.Url=RetryDeepLink(bot.Username,ctx.Args())
 	case ctx.CallbackQuery != nil:
 		retryButton.CallbackData = ctx.CallbackQuery.Data
 	case ctx.InlineQuery != nil:
@@ -189,4 +184,16 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 	)
 
 	return false, pkgerrors.Wrap(err, "fsub: send fsub message failed: ")
+}
+
+// RetryDeepLink keeps the original payload intact. A Retry_ prefix lets
+// /start count actual retry visits without relying on user identifiers.
+// Telegram start parameters cannot exceed 64 characters.
+func RetryDeepLink(username string,args []string)string{
+ if len(args)<2||args[1]==""{return fmt.Sprintf("https://t.me/%s?start",username)}
+ raw:=strings.TrimPrefix(args[1],"Retry_")
+ if len(raw)+len("Retry_")<=64{
+  return fmt.Sprintf("https://t.me/%s?start=Retry_%s",username,raw)
+ }
+ return fmt.Sprintf("https://t.me/%s?start=%s",username,raw)
 }
