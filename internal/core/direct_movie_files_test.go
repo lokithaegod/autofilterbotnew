@@ -37,7 +37,7 @@ func TestDirectFilesMalayalamFirstAndSubtitleLast(t *testing.T){
  if len(groups.Other)!=2{t.Fatalf("unlabeled files must remain Other: %+v",groups.Other)}
  if groups.firstKind()!="ml"{t.Fatal("Malayalam section not default")}
  keyboard:=directFileKeyboard("abcdefghijklmno",groups,"ml",0,1,"AutofilterMGbot",&config.Config{})
- if !strings.Contains(keyboard[0][0].Text,"Malayalam Sub & Files (4)") {t.Fatalf("unexpected header: %+v",keyboard)}
+ if !strings.Contains(keyboard[0][0].Text,"Malayalam Sub & Files 👇 (4)") {t.Fatalf("unexpected header: %+v",keyboard)}
  for _,row:=range keyboard{for _,button:=range row{
   if strings.HasPrefix(button.CallbackData,"card|"){t.Fatal("movie card callback must not appear in direct view")}
   if len(button.CallbackData)>64{t.Fatalf("callback over Telegram limit: %q",button.CallbackData)}
@@ -89,4 +89,36 @@ func TestDirectPagingAndSubtitleLastAcrossPages(t *testing.T){
  foundSRT:=false
  for _,row:=range second{for _,button:=range row{if strings.Contains(button.Text,"മലയാളം.srt"){foundSRT=true}}}
  if !foundSRT{t.Fatal("Malayalam subtitle should be on final page after video files")}
+}
+
+func TestTamilDubbedGroupAndVisibleButtons(t *testing.T){
+ files:=[]autofilter.Files{{
+  testDirectFile("ml","Film.2020.720p.mkv"),
+  testDirectFile("ta1","Film.2020.720p.Tamil.Dubbed.mkv"),
+  testDirectFile("ta2","Film.2020.1080p.Tam.Dub.mp4"),
+  testDirectFile("srt","Film.2020.Tamil.srt"),
+  testDirectFile("other","Film.2020.1080p.BluRay.mkv"),
+ }}
+ groups:=groupDirectMovieFiles(files,map[string]bool{"ml":true})
+ if len(groups.TamilVideos)!=2{t.Fatalf("expected 2 Tamil dubbed, got %d",len(groups.TamilVideos))}
+ if groups.TamilVideos[0].UniqueId!="ta1"||groups.TamilVideos[1].UniqueId!="ta2"{t.Fatalf("Tamil dubbed files not quality-sorted: %+v",groups.TamilVideos)}
+ if len(groups.Other)!=2{t.Fatalf("Tamil subtitle shouldn't be counted as a dubbed video: %+v",groups.Other)}
+ keyboard:=directFileKeyboard("abcdefghijklmno",groups,"ml",0,1,"AutoFilterMGbot",&config.Config{})
+ malHeader:=keyboard[0][0].Text
+ if !strings.Contains(malHeader,"Malayalam Sub & Files 👇"){t.Errorf("arrow missing: %q",malHeader)}
+ hasTamil,hasUnknown:=false,false
+ for _,row:=range keyboard{for _,btn:=range row{
+  if strings.Contains(btn.Text,"Tamil Dubbed Files (2)"){hasTamil=true}
+  if strings.Contains(btn.Text,"English Sub / Unverified Files (2)"){hasUnknown=true}
+  if btn.Text=="📁 Other Files (2)"{t.Error("old Other Files label still shown")}
+ }}
+ if !hasTamil||!hasUnknown{t.Errorf("missing Tamil or qualified English section: %+v",keyboard)}
+}
+func TestTamilDubbedDoesNotMatchSubtitlesOrPlainLanguage(t *testing.T){
+ for _,name:=range []string{"Film.2020.Tamil.srt","Film.2020.Tamil.Audio.mkv","Film.2020.Tamil.Sub.mkv","Film.2020.Tamil.Subtitles.zip"}{
+  if isTamilDubbedVideo(name){t.Errorf("false Tamil dubbed classification: %s",name)}
+ }
+ for _,name:=range []string{"Film.2020.Tamil.Dubbed.mkv","Film.2020.Tam.Dub.mp4","Film.2020.Tamil-Dub-720p.mkv"}{
+  if !isTamilDubbedVideo(name){t.Errorf("missed explicit Tamil dub: %s",name)}
+ }
 }
