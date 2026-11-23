@@ -21,7 +21,7 @@ var movieYear = regexp.MustCompile(`(?i)^(.+?)[ ._\-(\[]+((?:19|20)[0-9]{2})(?:[
 var movieWord = regexp.MustCompile(`[^a-z0-9]+`)
 // Strip known channel branding before the actual movie title. This avoids
 // duplicate cards for e.g. "Inception.2010" and "@CC Links Inception.2010".
-var movieLeadingCC = regexp.MustCompile(`(?i)^(?:[._ -]*\[cc\][._ -]*|[._ -]*@cc[._ -]*links[._ -]*|[._ -]*@cc_links[._ -]*)+`)
+var movieLeadingCC = regexp.MustCompile(`(?i)^(?:[._ -]*\[cc\][._ -]*|[._ -]*@cc[._ -]*links[._ -]*|[._ -]*@cc_links[._ -]*|[._ -]*@moviezday[._ -]*)+`)
 
 type movieCard struct {
  Title string
