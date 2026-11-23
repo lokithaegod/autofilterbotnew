@@ -55,6 +55,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 
 	d.AddHandlerToGroup(handlers.NewCommand("start", StartCommand), commandHandlerGroup)
  d.AddHandlerToGroup(handlers.NewCommand("subtitles", SubtitlesCommand), commandHandlerGroup)
+ d.AddHandlerToGroup(handlers.NewCommand("findcompatible", FindCompatibleCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"about", "help", "privacy"}, StaticCommands), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("delete", DeleteFile).SetAllowChannel(true), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"deleteall", "delall"}, DeleteAllFiles), commandHandlerGroup)
@@ -83,6 +84,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("cmd"), StaticCommands), callbackQueryGroup)
  d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Equal("msmenu"), SubtitlesMenu), callbackQueryGroup)
  d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("msend|"), SubtitleSendCallback), callbackQueryGroup)
+ d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("cfinder|"), FindCompatibleSubtitleCallback), callbackQueryGroup)
  d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("msmovie|"), SubtitleMovieCallback), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("close"), Close), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("navg"), Navigate), callbackQueryGroup)
@@ -101,6 +103,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("browse"), BrowseCallback), callbackQueryGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(exthandlers.ChatIds(env.Int64s("FILE_CHANNELS")), NewFile), miscHandlerGroup)
+ d.AddHandlerToGroup(handlers.NewMessage(message.Private, FindCompatibleIncomingSRT), miscHandlerGroup)
  // Only register a subtitle channel when explicitly configured and distinct from movie sources.
  for _,subtitleID:=range env.Int64s("SUBTITLE_CHANNEL_ID") {
   overlap:=false
