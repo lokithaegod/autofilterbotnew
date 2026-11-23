@@ -44,7 +44,11 @@ func StartCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	data := string(bytes)
-	switch data[0] {
+ if len(data)==0 {
+  _app.Log.Warn("start: decoded an empty deep-link payload")
+  return nil
+ }
+ switch data[0] {
 	case DataPrefixFile:
 		ok, err := fsub.CheckFsub(_app, bot, ctx)
 		if err != nil {
