@@ -121,3 +121,20 @@ func TestMalayalamSRTIncludedInMalayalamSubFiles(t *testing.T) {
   t.Fatalf("other untagged files should remain in More Files: %+v",menu)
  }
 }
+
+func TestMalayalamZipAndSRTAreInMalayalamSection(t *testing.T){
+ pages:=[]autofilter.Files{{
+  mockFile("[CC].A.Quiet.Place.2018.1080p.BRRip.mkv"),
+  mockFile("A.Quiet.Place.2018.720p.BluRay.മലയാളം.zip"),
+  mockFile("A.Quiet.Place.2018.English.zip"),
+  mockFile("A.Quiet.Place.2018.മലയാളം.srt"),
+ }}
+ cards:=buildMovieCards(pages)
+ if len(cards)!=1 {t.Fatalf("movie split into %d cards",len(cards))}
+ if got:=len(cards[0].Subs);got!=2{t.Fatalf("expected Malayalam ZIP and SRT in subtitle group; got %d",got)}
+ menu:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","all",&config.Config{})
+ if !strings.Contains(menu[1][0].Text,"Malayalam Sub Files (2)"){t.Errorf("Malayalam archives missing: %+v",menu)}
+ if !strings.Contains(menu[2][0].Text,"More Files (2)"){t.Errorf("non-Malayalam files unexpectedly selected: %+v",menu)}
+ if isMalayalamSubtitleArchive("A.Quiet.Place.2018.English.zip"){t.Fatal("English ZIP incorrectly classified as Malayalam")}
+ if isMalayalamSubtitleArchive("Movie.2018.Malayalam.mkv"){t.Fatal("video extension incorrectly classified as archive")}
+}
