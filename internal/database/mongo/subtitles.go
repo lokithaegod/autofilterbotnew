@@ -14,7 +14,7 @@ func (c *Client) SaveSubtitle(entry *subtitles.Entry) error {
  if entry==nil || entry.UniqueID=="" || entry.FileID=="" || entry.TitleKey=="" || entry.Year=="" {
   return mongo.ErrNoDocuments
  }
- _,err:=c.subtitleCollection.UpdateOne(c.ctx,bson.M{"_id":entry.UniqueID},bson.M{"$set":entry},options.Update().SetUpsert(true))
+ _,err:=c.subtitleCollection.ReplaceOne(c.ctx,bson.M{"_id":entry.UniqueID},entry,options.Replace().SetUpsert(true))
  return err
 }
 
