@@ -63,12 +63,21 @@ def analyze(subtitle,video):
         probe=json.loads(p.stdout)
         duration=float(probe.get("format",{}).get("duration",0))
         streams=probe.get("streams",[])
+        video_stream=next((stream for stream in streams if stream.get("codec_type")=="video"),None)
+        fps=None
+        if video_stream:
+            raw_rate=video_stream.get("avg_frame_rate","")
+            try:
+                numerator,denominator=(float(value) for value in raw_rate.split("/"))
+                if denominator>0:fps=round(numerator/denominator,3)
+            except (ValueError,ZeroDivisionError):pass
+        metadata={"duration_seconds":round(duration,3),"fps":fps}
         if duration<=0 or not any(s.get("codec_type")=="video" for s in streams):
             raise ValueError("No valid video stream/duration")
         if original[-1][1]>duration+5:
-            return {"status":"incompatible","reason":"Subtitle ends after the video runtime"}
+            return {"status":"incompatible","reason":"Subtitle ends after the video runtime","video":metadata}
         if not any(s.get("codec_type")=="audio" for s in streams):
-            return {"status":"unverified","reason":"Video has no audio stream"}
+            return {"status":"unverified","reason":"Video has no audio stream","video":metadata}
     except (OSError,ValueError,subprocess.SubprocessError) as e:
         return {"status":"unverified","reason":"FFprobe unavailable or failed"}
     tool=shutil.which("ffsubsync") or shutil.which("ffs")
@@ -87,6 +96,7 @@ def analyze(subtitle,video):
         matches=SCORE.findall(logs)
         reliable=bool(matches) and max(map(float,matches))>0 and "low-quality alignment" not in logs
         result=compare_cues(original,cues(out),quality_confirmed=reliable)
+        result["video"]=metadata
         result["method"]="ffprobe and FFsubsync voice activity; original media preserved"
         return result
 
