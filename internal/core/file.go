@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
 	"github.com/Jisin0/autofilterbot/internal/database"
 	"github.com/Jisin0/autofilterbot/internal/functions"
 	"github.com/Jisin0/autofilterbot/pkg/conversation"
@@ -32,6 +33,17 @@ func NewFile(bot *gotgbot.Bot, ctx *ext.Context) error {
 		_app.Log.Debug("newfile: empty file name after sanitization", zap.String("file_id", file.FileName), zap.String("file_type", file.FileType))
 		return nil
 	}
+
+    // Caption suitability is an optional overlay on existing movie records.
+    // It does not alter filenames, SaveFile semantics, or old database fields.
+    // Video documents are recognized using their original Telegram filename,
+    // because the movie index strips extensions during ingestion.
+    isVideo := m.Video!=nil || (m.Document!=nil && captiontags.IsVideoUpload(m.Document.FileName,false))
+    if isVideo && captiontags.IsTagged(m.Caption) {
+        if err:=_app.DB.SetMalayalamCaptionTag(file.UniqueId,true);err!=nil{
+            _app.Log.Warn("newfile: failed saving Malayalam caption tag",zap.Error(err))
+        }
+    }
 
 	err := _app.DB.SaveFile(file)
 	if err != nil {

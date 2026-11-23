@@ -72,7 +72,13 @@ func StaticCommands(bot *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 
-	msg.Format(_app.BasicMessageValues(ctx, extraValues))
+	// Do not mutate the stored welcome-message keyboard when adding the subtitle section.
+ if commandName=="start" {
+  copyMsg:=*msg
+  copyMsg.Keyboard=append(append([][]button.InlineKeyboardButton(nil),msg.Keyboard...),[]button.InlineKeyboardButton{{Text:"📜 Malayalam Subtitles",CallbackData:"msmenu"}})
+  msg=&copyMsg
+ }
+ msg.Format(_app.BasicMessageValues(ctx, extraValues))
 
 	if isCallback {
 		if isMedia {

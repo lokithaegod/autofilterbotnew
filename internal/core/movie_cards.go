@@ -8,6 +8,7 @@ import (
  "unicode/utf8"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/subtitles"
  "github.com/Jisin0/autofilterbot/pkg/callbackdata"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -117,6 +118,9 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
   count:=len(card.Videos)+len(card.Subs)+len(card.Other)
   label:=fmt.Sprintf("%s • %d files",cardLabel(card),count)
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:clippedLabel(label,75),CallbackData:cardCallback(id,i,0)}})
+  if movieSubtitleAvailable(card) {
+   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,i)}})
+  }
  }
  var nav []gotgbot.InlineKeyboardButton
  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardsCallback(id,page-1)})}
@@ -132,10 +136,43 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  if card.MalayalamSubs>0 {
   keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"✅ Malayalam subtitle file available",CallbackData:"ignore"}})
  }
+ if movieSubtitleAvailable(card) {
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📜 Download Malayalam Subtitle",CallbackData:fmt.Sprintf("msmovie|%s_%d",id,index)}})
+ }
+ // Keep caption-based manual claims separate from audio-verified matches.
+ // Only files within this movie card are inspected, and the original file
+ // collection and file-delivery buttons remain unchanged.
+ movieFiles:=make(autofilter.Files,0,len(card.Videos)+len(card.Other))
+ movieFiles=append(movieFiles,card.Videos...)
+ movieFiles=append(movieFiles,card.Other...)
+ ids:=make([]string,0,len(movieFiles))
+ for _,f:=range movieFiles {ids=append(ids,f.UniqueId)}
+ tagged:=make(map[string]bool)
+ var tagErr error
+ if _app!=nil && _app.DB!=nil {
+  tagged,tagErr=_app.DB.FindMalayalamCaptionTags(ids)
+ }
+ if tagErr!=nil{
+  if _app!=nil && _app.Log!=nil{_app.Log.Warn("movie cards: caption tags lookup failed",zap.Error(tagErr))}
+  if kind=="tagged"||kind=="other"{
+   return [][]gotgbot.InlineKeyboardButton{{{Text:"⚠️ Subtitle tags temporarily unavailable",CallbackData:"ignore"}},
+    {{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}}}
+  }
+ }
+ captionTagged:=make(autofilter.Files,0)
+ captionOther:=make(autofilter.Files,0)
+ for _,f:=range movieFiles{
+  if tagged[f.UniqueId] {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+ }
  all:=make(autofilter.Files,0,len(card.Videos)+len(card.Subs)+len(card.Other))
- if kind=="msub" {
+ switch kind{
+ case "msub":
   for _,f:=range card.Subs {if isMalayalamSubtitle(f.FileName){all=append(all,f)}}
- }else{
+ case "tagged":
+  all=append(all,captionTagged...)
+ case "other":
+  all=append(all,captionOther...)
+ default:
   all=append(all,card.Videos...)
   all=append(all,card.Subs...)
   all=append(all,card.Other...)
@@ -165,6 +202,19 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d options",page+1,maxPages,len(all)),CallbackData:"ignore"})
  if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:cardModeCallback(id,index,page+1,kind)})}
  keyboard=append(keyboard,nav)
+ // These labels indicate user-provided captions, not verified audio timing.
+ tagLabel:=fmt.Sprintf("✅ Malayalam Sub Available (%d)",len(captionTagged))
+ otherLabel:=fmt.Sprintf("🎬 Other Files (%d)",len(captionOther))
+ if kind=="tagged"{tagLabel="☑️ "+tagLabel}
+ if kind=="other"{otherLabel="☑️ "+otherLabel}
+ if tagErr==nil {
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{
+   {Text:tagLabel,CallbackData:cardModeCallback(id,index,0,"tagged")},
+  })
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{
+   {Text:otherLabel,CallbackData:cardModeCallback(id,index,0,"other")},
+  })
+ }
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}})
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file results",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return keyboard
@@ -193,7 +243,7 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
   if err!=nil||index<0||index>=len(cards){_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Movie not found",ShowAlert:true});return nil}
   kind:="all"
   if expected==4 {kind=data.Args[3]}
-  if kind!="all"&&kind!="msub"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
+  if kind!="all"&&kind!="msub"&&kind!="tagged"&&kind!="other"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
   keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind,_app.Config)
  }else{
   if page>=(len(cards)+5)/6 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Page not found",ShowAlert:true});return nil}
@@ -203,4 +253,11 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  if err!=nil {_app.Log.Warn("movie cards: edit markup failed",zap.Error(err))}
  _,_=c.Answer(bot,nil)
  return nil
+}
+
+// Subtitle availability is queried from the independent collection; movie records are not changed.
+func movieSubtitleAvailable(card movieCard)bool{
+ if card.Year=="" || _app==nil || _app.DB==nil{return false}
+ available,err:=_app.DB.SubtitleExists(subtitles.Normalize(card.Title),card.Year)
+ return err==nil&&available
 }
