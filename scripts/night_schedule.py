@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Reconcile AutoFilterMG's off-hours across Render and UptimeRobot.
+"""Reconcile UptimeRobot monitoring with AutoFilterMG's India quiet hours.
 
-The service remains untouched unless BOTH GitHub Actions secrets are set.
-No credentials or response bodies containing tokens are printed.
+Render Free instances sleep after inactivity and wake on HTTP traffic.
+Do not call the Render suspend/resume API: it returned HTTP 403 and left
+monitoring paused on 2026-11-23. This script never changes Render settings.
 """
 from __future__ import annotations
 
@@ -16,8 +17,6 @@ import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
-RENDER_SERVICE_ID = "srv-dc0r1767bikc73bktnf0"
-RENDER_ENDPOINT = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}"
 BOT_URL = "https://autofilterbotnew-ioi4.onrender.com/"
 UPTIMEROBOT_API = "https://api.uptimerobot.com/v2/"
 TZ = ZoneInfo("Asia/Kolkata")
@@ -25,31 +24,26 @@ HTTP_TIMEOUT = 15
 
 
 def desired_online(now: dt.datetime) -> bool:
-    """07:00 <= local time < 01:00 following day (1 AM-7 AM closed)."""
+    """Online from 07:00 IST through 00:59 IST, offline 01:00-06:59."""
     hour = now.astimezone(TZ).hour
     return not 1 <= hour < 7
 
 
-def request_json(url: str, method: str = "GET", *, token: str = "",
-                 form: dict[str, str] | None = None) -> dict:
-    body = urllib.parse.urlencode(form).encode() if form is not None else None
-    headers = {"Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    if body is not None:
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+def request_json(url: str, *, form: dict[str, str]) -> dict:
+    body = urllib.parse.urlencode(form).encode()
+    headers = {"Accept": "application/json",
+               "Content-Type": "application/x-www-form-urlencoded"}
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as response:
             payload = response.read(100_000)
             return json.loads(payload) if payload else {}
     except urllib.error.HTTPError as exc:
-        # Do not dump response body (might include information from the API).
-        raise RuntimeError(f"{method} request failed with HTTP {exc.code}") from None
+        raise RuntimeError(f"UptimeRobot API HTTP {exc.code}") from None
 
 
 def uptime_robot_call(method: str, key: str, **fields: str) -> dict:
-    result = request_json(UPTIMEROBOT_API + method, "POST",
+    result = request_json(UPTIMEROBOT_API + method,
                           form={"api_key": key, "format": "json", **fields})
     if result.get("stat") != "ok":
         raise RuntimeError(f"UptimeRobot {method} rejected the request")
@@ -57,14 +51,14 @@ def uptime_robot_call(method: str, key: str, **fields: str) -> dict:
 
 
 def find_our_monitor(key: str) -> dict:
-    """Require exactly one match; never modify another UptimeRobot monitor."""
+    """Only alter the monitor whose exact URL matches this bot."""
     results = []
     offset = 0
     while True:
         data = uptime_robot_call("getMonitors", key, limit="50", offset=str(offset))
         page = data.get("monitors", [])
         if not isinstance(page, list):
-            raise RuntimeError("Invalid monitor list")
+            raise RuntimeError("UptimeRobot returned an invalid monitor list")
         results.extend(page)
         if len(page) < 50:
             break
@@ -81,81 +75,74 @@ def find_our_monitor(key: str) -> dict:
 def set_monitor(key: str, monitor: dict, online: bool) -> None:
     status = int(monitor.get("status", -1))
     if online and status != 0:
-        print("UptimeRobot monitoring is already enabled")
+        print("UptimeRobot monitor already enabled", flush=True)
         return
     if not online and status == 0:
-        print("UptimeRobot monitoring is already paused")
+        print("UptimeRobot monitor already paused", flush=True)
         return
     uptime_robot_call("editMonitor", key, id=str(monitor["id"]),
                       status="1" if online else "0")
-    print("UptimeRobot monitoring " + ("resumed" if online else "paused"))
-
-
-def render_state(key: str) -> bool:
-    data = request_json(RENDER_ENDPOINT, token=key)
-    state = data.get("suspended")
-    if state not in {"not_suspended", "suspended"}:
-        raise RuntimeError("Unknown Render service suspension state")
-    if data.get("id") != RENDER_SERVICE_ID:
-        raise RuntimeError("Render returned an unexpected service")
-    return state == "not_suspended"
-
-
-def set_render(key: str, online: bool) -> None:
-    if render_state(key) == online:
-        print("Render already " + ("resumed" if online else "suspended"))
-        return
-    suffix = "resume" if online else "suspend"
-    request_json(RENDER_ENDPOINT + "/" + suffix, "POST", token=key)
-    print("Render " + suffix + " request accepted")
+    print("UptimeRobot monitor " + ("resumed" if online else "paused"), flush=True)
 
 
 def health_ready() -> bool:
+    """HTTP 200 means the bot's health handler can reach Telegram and MongoDB."""
     try:
-        req = urllib.request.Request(BOT_URL, headers={"User-Agent": "AutoFilterMG-schedule/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            return response.status == 200 and b"Telegram bot process is running" in response.read(1000)
+        req = urllib.request.Request(BOT_URL + "healthz",
+                                     headers={"User-Agent": "AutoFilterMG-schedule/2.0"})
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as response:
+            return (response.status == 200
+                    and b"Telegram bot process is running" in response.read(1000))
     except (urllib.error.URLError, TimeoutError, OSError):
         return False
 
 
-def reconcile(render_key: str, uptime_key: str, online: bool) -> None:
-    # Resolve monitor before changing anything. Missing or duplicate monitors
-    # cause a safe failure instead of touching the wrong UptimeRobot monitor.
-    monitor = find_our_monitor(uptime_key)
-    if online:
-        # Resume the bot first. Keep UptimeRobot paused while it warms up so
-        # planned startup doesn't create false downtime alerts.
-        set_render(render_key, True)
-        for attempt in range(6):
-            if health_ready():
-                set_monitor(uptime_key, monitor, True)
-                print("Bot is ready and scheduled monitoring is enabled")
-                return
-            if attempt < 5:
-                time.sleep(15)
-        raise RuntimeError("Bot has not become healthy yet; next run will retry")
-    else:
-        # Pause ALL monitoring before suspending so HTTP checks cannot wake
-        # the bot or generate expected downtime alerts.
-        set_monitor(uptime_key, monitor, False)
-        set_render(render_key, False)
-        print("Night quiet hours are active")
+def reconcile(key: str, online: bool) -> None:
+    monitor = find_our_monitor(key)
+    if not online:
+        # Stop monitoring; Render decides when an idle Free instance sleeps.
+        set_monitor(key, monitor, False)
+        print("Night quiet hours active; no Render API changes", flush=True)
+        return
+
+    # Critical: do not leave monitoring paused merely because the bot
+    # is still cold-starting or health checks are failing.
+    set_monitor(key, monitor, True)
+    for attempt in range(8):
+        if health_ready():
+            print("Bot healthy; daytime monitoring enabled", flush=True)
+            return
+        if attempt < 7:
+            print(f"Waiting for bot health ({attempt + 1}/8)", flush=True)
+            time.sleep(15)
+    raise RuntimeError("Bot is not healthy yet; monitoring is enabled and the next run will retry")
+
+
+def self_test() -> None:
+    # Boundary checks include midnight crossover and the entire quiet period.
+    for hour, minute, expected in [
+        (0, 59, True), (1, 0, False), (3, 0, False),
+        (6, 59, False), (7, 0, True), (23, 59, True)
+    ]:
+        moment = dt.datetime(2026, 11, 23, hour, minute, tzinfo=TZ)
+        assert desired_online(moment) is expected, (moment, expected)
+    print("Schedule boundary self-test passed")
 
 
 def main() -> int:
-    render_key = os.getenv("RENDER_API_KEY", "").strip()
-    uptime_key = os.getenv("UPTIMEROBOT_API_KEY", "").strip()
-    if not render_key or not uptime_key:
-        print("Not activated: add both RENDER_API_KEY and UPTIMEROBOT_API_KEY "
-              "as repository Actions secrets. No changes made.")
+    if "--self-test" in sys.argv:
+        self_test()
         return 0
+    key = os.getenv("UPTIMEROBOT_API_KEY", "").strip()
+    if not key:
+        print("UPTIMEROBOT_API_KEY missing; no changes made", file=sys.stderr)
+        return 1
     online = desired_online(dt.datetime.now(dt.timezone.utc))
-    print("Desired state (Asia/Kolkata): " + ("ONLINE" if online else "OFFLINE"))
+    print("Desired state (Asia/Kolkata): " + ("ONLINE" if online else "OFFLINE"), flush=True)
     try:
-        reconcile(render_key, uptime_key, online)
+        reconcile(key, online)
     except Exception as exc:
-        print(f"Schedule reconciliation failed: {exc}", file=sys.stderr)
+        print(f"Schedule reconciliation failed: {exc}", file=sys.stderr, flush=True)
         return 1
     return 0
 
