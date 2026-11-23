@@ -2,6 +2,7 @@ package core
 
 import (
  "fmt"
+ "path/filepath"
  "strconv"
  "strings"
 
@@ -89,6 +90,10 @@ func sendSubtitleResults(bot *gotgbot.Bot,chatID,userID int64,key,year string, v
   default:marker="❔ Release unverified · "
   }
   rows=append(rows,[]gotgbot.InlineKeyboardButton{{Text:marker+label,CallbackData:data}})
+  finder:=fmt.Sprintf("cfinder|%s_%d",entry.UniqueID,userID)
+  if strings.EqualFold(filepath.Ext(entry.FileName),".srt")&&len(finder)<=64{
+   rows=append(rows,[]gotgbot.InlineKeyboardButton{{Text:"🔍 Find compatible video files",CallbackData:finder}})
+  }
  }
  if len(rows)==0{return fmt.Errorf("subtitle callbacks exceed Telegram's 64 byte limit")}
  _,err=bot.SendMessage(chatID,fmt.Sprintf("📜 Malayalam subtitles (%d result(s))\nRelease matching uses filenames only; timing compatibility is not guaranteed.",len(rows)),
