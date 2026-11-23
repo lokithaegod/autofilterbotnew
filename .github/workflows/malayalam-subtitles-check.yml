@@ -1,0 +1,29 @@
+name: Malayalam subtitles branch checks
+
+on:
+  push:
+    branches:
+      - feature/malayalam-subtitles
+  pull_request:
+    paths:
+      - "internal/subtitles/**"
+      - "internal/core/**"
+      - "internal/database/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - name: Test subtitle parsing
+        run: go test ./internal/subtitles
+      - name: Compile affected application packages
+        run: go test ./internal/core ./internal/database/mongo -run '^$'
