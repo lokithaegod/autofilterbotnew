@@ -61,3 +61,29 @@ dialogue or subtitle language. FPS, source labels and release groups are
 optional and must not be guessed. Subtitle authors may use inconsistent names.
 Actual timing validation would require inspecting the video/subtitle streams
 or letting the user report compatibility.
+
+## Real-world filename compatibility (2026-11-23 screenshots)
+
+- `War.Dogs.2016.720p.BluRay.x264-[YTS.AG].mp4`: source BluRay,
+  resolution 720p, known release label YTS.
+- `Never.Surrender.2026.720p.WEB-DL.@Team_Goat_Bot.mkv`:
+  source WEB-DL, resolution 720p, uploader @Team_Goat_Bot;
+  the uploader handle is **not** a proof of subtitle compatibility.
+- `Transformers.2.2009.IMAX.1080p.BRRip` and other 720p/1080p
+  BluRay variants: BRRip, BDRip and BluRay are related disc-source
+  families, but synchronization is **not guaranteed**. They are ranked
+  as possible matches rather than claimed to be identical.
+- HDRip is not automatically grouped with BluRay/BRRip/BDRip. An HDRip
+  source could be from a different master.
+- `Transformers 2 (2009)` and `Transformers: Revenge of the Fallen
+  (2009)` are alternate names for the same film, but the current
+  exact normalized-title matching does not automatically resolve
+  those aliases. Such files require a consistent title or an
+  explicit alias feature before reliable linking.
+
+The screenshot listing several Transformers video releases does not
+include a corresponding SRT file or timing comparison. A subtitle
+offered by a separate bot or webpage does not establish that all
+versions are in sync. For a validated result, test opening the
+actual .srt and movie in a player and checking timestamps at the
+beginning, middle and end.
