@@ -111,7 +111,7 @@ func NewClient(ctx context.Context, mongodbUri string, log *zap.Logger, opts ...
 	}
 
 	_, err = client.subtitleCollection.Indexes().CreateOne(ctx, mongo.IndexModel{Keys:bson.D{{Key:"title_key",Value:1},{Key:"year",Value:1}}})
- if err!=nil{return nil,fmt.Errorf("subtitle index: %w",err)}
+ if err!=nil{log.Warn("subtitle index creation failed; continuing without index",zap.Error(err))}
 	return client, nil
 }
 
