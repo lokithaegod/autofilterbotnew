@@ -31,10 +31,9 @@ func TestDirectFilesMalayalamFirstAndSubtitleLast(t *testing.T){
  if ml[0].UniqueId!="ml1"||ml[1].UniqueId!="ml2"||ml[2].UniqueId!="mlsrt"||ml[3].UniqueId!="malzip"{
   t.Fatalf("Malayalam videos must sort 720p then 1080p and subtitles come last: %+v",ml)
  }
- if len(groups.english())!=2 || groups.english()[0].UniqueId!="en1"||groups.english()[1].UniqueId!="srt"{
-  t.Fatalf("explicit English video then SRT expected: %+v",groups.english())
+ if len(groups.english())!=4 || groups.english()[0].UniqueId!="other1"||groups.english()[1].UniqueId!="en1"||groups.english()[2].UniqueId!="unknown"||groups.english()[3].UniqueId!="srt"{
+  t.Fatalf("all non-Tamil regular files should be English, videos ordered before SRT: %+v",groups.english())
  }
- if len(groups.Other)!=2{t.Fatalf("unlabeled files must remain Other: %+v",groups.Other)}
  if groups.firstKind()!="ml"{t.Fatal("Malayalam section not default")}
  keyboard:=directFileKeyboard("abcdefghijklmno",groups,"ml",0,1,"AutofilterMGbot",&config.Config{})
  if !strings.Contains(keyboard[0][0].Text,"Malayalam Sub & Files 👇 (4)") {t.Fatalf("unexpected header: %+v",keyboard)}
@@ -61,11 +60,11 @@ func TestDirectEnglishRequiresPositiveEvidence(t *testing.T){
 
 func TestDirectNoMalayalamOrEmptyCategories(t *testing.T){
  groups:=groupDirectMovieFiles([]autofilter.Files{{testDirectFile("one","Movie.2020.1080p.mkv")}},nil)
- if groups.firstKind()!="other"{t.Fatalf("expected Other first if no tags, got %q",groups.firstKind())}
+ if groups.firstKind()!="en"{t.Fatalf("expected English when no tags, got %q",groups.firstKind())}
  keyboard:=directFileKeyboard("abcdefghijklmno",groups,groups.firstKind(),0,1,"AutofilterMGbot",&config.Config{})
  for _,row:=range keyboard{for _,button:=range row{
-  if strings.Contains(button.Text,"English Sub Files")||strings.Contains(button.Text,"Malayalam Sub & Files"){
-   t.Fatalf("empty language section should be hidden: %+v",keyboard)
+  if strings.Contains(button.Text,"Malayalam Sub & Files")||strings.Contains(button.Text,"Tamil Dubbed Files")||strings.Contains(button.Text,"Unverified"){
+   t.Fatalf("empty or removed section should be hidden: %+v",keyboard)
   }
  }}
 }
@@ -102,17 +101,17 @@ func TestTamilDubbedGroupAndVisibleButtons(t *testing.T){
  groups:=groupDirectMovieFiles(files,map[string]bool{"ml":true})
  if len(groups.TamilVideos)!=2{t.Fatalf("expected 2 Tamil dubbed, got %d",len(groups.TamilVideos))}
  if groups.TamilVideos[0].UniqueId!="ta1"||groups.TamilVideos[1].UniqueId!="ta2"{t.Fatalf("Tamil dubbed files not quality-sorted: %+v",groups.TamilVideos)}
- if len(groups.Other)!=2{t.Fatalf("Tamil subtitle shouldn't be counted as a dubbed video: %+v",groups.Other)}
+ if len(groups.english())!=2{t.Fatalf("Tamil subtitle and remaining regular video belong in English section: %+v",groups.english())}
  keyboard:=directFileKeyboard("abcdefghijklmno",groups,"ml",0,1,"AutoFilterMGbot",&config.Config{})
  malHeader:=keyboard[0][0].Text
  if !strings.Contains(malHeader,"Malayalam Sub & Files 👇"){t.Errorf("arrow missing: %q",malHeader)}
- hasTamil,hasUnknown:=false,false
+ hasTamil,hasEnglish:=false,false
  for _,row:=range keyboard{for _,btn:=range row{
   if strings.Contains(btn.Text,"Tamil Dubbed Files (2)"){hasTamil=true}
-  if strings.Contains(btn.Text,"English Sub / Unverified Files (2)"){hasUnknown=true}
+  if strings.Contains(btn.Text,"English Sub Files (2)"){hasEnglish=true}
   if btn.Text=="📁 Other Files (2)"{t.Error("old Other Files label still shown")}
  }}
- if !hasTamil||!hasUnknown{t.Errorf("missing Tamil or qualified English section: %+v",keyboard)}
+ if !hasTamil||!hasEnglish{t.Errorf("missing Tamil or English section: %+v",keyboard)}
 }
 func TestTamilDubbedDoesNotMatchSubtitlesOrPlainLanguage(t *testing.T){
  for _,name:=range []string{"Film.2020.Tamil.srt","Film.2020.Tamil.Audio.mkv","Film.2020.Tamil.Sub.mkv","Film.2020.Tamil.Subtitles.zip"}{
@@ -121,4 +120,32 @@ func TestTamilDubbedDoesNotMatchSubtitlesOrPlainLanguage(t *testing.T){
  for _,name:=range []string{"Film.2020.Tamil.Dubbed.mkv","Film.2020.Tam.Dub.mp4","Film.2020.Tamil-Dub-720p.mkv"}{
   if !isTamilDubbedVideo(name){t.Errorf("missed explicit Tamil dub: %s",name)}
  }
+}
+
+func TestThreeGroupsNoOtherAndOwnerPrecedence(t *testing.T){
+ pages:=[]autofilter.Files{{
+  testDirectFile("tamil","Film.2020.1080p.Tamil.Dubbed.mkv"),
+  testDirectFile("both","Film.2020.720p.Tamil.Dubbed.mkv"),
+  testDirectFile("regular","Film.2020.720p.ENG.BluRay.mkv"),
+  testDirectFile("unknown","Film.2020.1080p.WEBRip.mkv"),
+  testDirectFile("engsrt","Film.2020.English.srt"),
+  testDirectFile("genericzip","Film.2020.Subtitles.zip"),
+  testDirectFile("mal","Film.2020.1080p.mkv"),
+  testDirectFile("malsrt","Film.2020.മലയാളം.srt"),
+ }}
+ groups:=groupDirectMovieFiles(pages,map[string]bool{"both":true,"mal":true})
+ if len(groups.malayalam())!=3{t.Fatalf("Malayalam override and SRT expected: %+v",groups.malayalam())}
+ if groups.malayalam()[2].UniqueId!="malsrt"{t.Fatal("Malayalam SRT must be last")}
+ if len(groups.TamilVideos)!=1||groups.TamilVideos[0].UniqueId!="tamil"{t.Fatalf("Tamil category must exclude Malayalam-approved Tamil file: %+v",groups.TamilVideos)}
+ if len(groups.english())!=4{t.Fatalf("regular movies plus subtitle documents must stay accessible: %+v",groups.english())}
+ if groups.english()[0].UniqueId!="regular"||groups.english()[1].UniqueId!="unknown"||groups.english()[2].UniqueId!="engsrt"||groups.english()[3].UniqueId!="genericzip"{t.Fatalf("English video order then subtitle documents: %+v",groups.english())}
+ keyboard:=directFileKeyboard("abcdefghijklmno",groups,"ml",0,123,"AutoFilterMGbot",&config.Config{})
+ for _,row:=range keyboard{for _,button:=range row{
+  if strings.Contains(button.Text,"Unverified")||strings.Contains(button.Text,"Other Files"){t.Fatalf("Other/Unverified category still present: %+v",keyboard)}
+ }}
+ if len(groupDirectMovieFiles(pages,nil).english())!=5{t.Fatal("untagged regular releases should be classified English")}
+ // A callback from an old message containing the former other group
+ // should transparently show English instead of becoming an empty tab.
+ old:=directFileKeyboard("abcdefghijklmno",groups,"other",0,123,"AutoFilterMGbot",&config.Config{})
+ if !strings.Contains(old[0][0].Text,"English Sub Files"){t.Fatalf("old other callback should redirect to English: %+v",old)}
 }
