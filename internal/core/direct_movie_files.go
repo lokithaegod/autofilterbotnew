@@ -33,12 +33,10 @@ type directMovieGroups struct {
  EnglishVideos autofilter.Files
  EnglishSubs autofilter.Files
  TamilVideos autofilter.Files
- Other autofilter.Files
 }
 
 func isMovieSubtitleDocument(name string)bool{
- return isSubtitleFile(name)||isMalayalamSubtitleArchive(name)||
-  (strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)),".zip")&&englishSRTMarker.MatchString(name))
+ return isSubtitleFile(name)||strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)),".zip")
 }
 
 func isEnglishMarked(name string)bool{
@@ -74,9 +72,11 @@ func sortDirectSubs(files autofilter.Files){
  })
 }
 
-// English Sub Files includes only explicitly labeled video releases and
-// English-labeled subtitle documents. The absence of a Malayalam owner tag
-// never implies English subtitles.
+// The owner confirms regular non-Tamil movie releases include English subtitles.
+// Malayalam-approved files take precedence. Explicitly Tamil-dubbed video
+// releases stay in their own section regardless of subtitle availability.
+// Preserve all remaining search results in the English section instead of
+// dropping files when removing the former Other/Unverified tab.
 func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)directMovieGroups {
  var g directMovieGroups
  for _,page:=range pages{for _,f:=range page{
@@ -84,12 +84,10 @@ func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)direc
   switch{
   case isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]):
    if subtitle{g.MalayalamSubs=append(g.MalayalamSubs,f)}else{g.MalayalamVideos=append(g.MalayalamVideos,f)}
-  case isTamilDubbedVideo(f.FileName):
+  case (videoExtension.MatchString(f.FileName)||f.FileType=="video") && isTamilDubbedVideo(f.FileName):
    g.TamilVideos=append(g.TamilVideos,f)
-  case isEnglishMarked(f.FileName):
-   if subtitle{g.EnglishSubs=append(g.EnglishSubs,f)}else{g.EnglishVideos=append(g.EnglishVideos,f)}
   default:
-   g.Other=append(g.Other,f)
+   if subtitle{g.EnglishSubs=append(g.EnglishSubs,f)}else{g.EnglishVideos=append(g.EnglishVideos,f)}
   }
  }}
  sortDirectVideos(g.MalayalamVideos)
@@ -97,7 +95,6 @@ func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)direc
  sortDirectVideos(g.EnglishVideos)
  sortDirectSubs(g.EnglishSubs)
  sortDirectVideos(g.TamilVideos)
- // Keep unknown files in their existing search-result order.
  return g
 }
 
@@ -116,7 +113,7 @@ func (g directMovieGroups)selected(kind string)autofilter.Files{
  case "ml":return g.malayalam()
  case "en":return g.english()
  case "ta":return g.TamilVideos
- case "other":return g.Other
+ case "other":return g.english() // Backward-compatible with previously sent buttons.
  }
  return nil
 }
@@ -124,7 +121,7 @@ func (g directMovieGroups)firstKind()string{
  if len(g.MalayalamVideos)+len(g.MalayalamSubs)>0{return "ml"}
  if len(g.EnglishVideos)+len(g.EnglishSubs)>0{return "en"}
  if len(g.TamilVideos)>0{return "ta"}
- return "other"
+ return "en"
 }
 
 func directFileCallback(id,kind string,page int)string{
@@ -133,6 +130,7 @@ func directFileCallback(id,kind string,page int)string{
 
 func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatID int64,username string,opts autofilter.ProcessFilesOptions)[][]gotgbot.InlineKeyboardButton{
  if kind!="ml"&&kind!="en"&&kind!="ta"&&kind!="other"{kind=g.firstKind()}
+ if kind=="other"{kind="en"} // Older callback compatibility
  selected:=g.selected(kind)
  if len(selected)==0{kind=g.firstKind();selected=g.selected(kind)}
  maxPages:=(len(selected)+directPageSize-1)/directPageSize
@@ -143,7 +141,7 @@ func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatI
  label:="✅ Malayalam Sub & Files 👇"
  if kind=="en"{label="🇬🇧 English Sub Files"}
  if kind=="ta"{label="🎙️ Tamil Dubbed Files"}
- if kind=="other"{label="🇬🇧 English Sub / Unverified Files"}
+ if kind=="other"{kind="en";label="🇬🇧 English Sub Files"}
  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("%s (%d)",label,len(selected)),CallbackData:"ignore"}})
  start:=page*directPageSize
  end:=start+directPageSize
@@ -169,9 +167,6 @@ func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatI
  }
  if len(g.TamilVideos)>0&&kind!="ta"{
   result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🎙️ Tamil Dubbed Files (%d)",len(g.TamilVideos)),CallbackData:directFileCallback(id,"ta",0)}})
- }
- if len(g.Other)>0&&kind!="other"{
-  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🇬🇧 English Sub / Unverified Files (%d)",len(g.Other)),CallbackData:directFileCallback(id,"other",0)}})
  }
  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file filters",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return result
@@ -203,6 +198,7 @@ func DirectFileCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  blocked,err:=_app.DB.IsUserBlocked(c.From.Id)
  if err!=nil||blocked{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Search temporarily unavailable.",ShowAlert:true});return nil}
  if kind!="ml"&&kind!="en"&&kind!="ta"&&kind!="other"{_,_=c.Answer(bot,nil);return nil}
+ if kind=="other"{kind="en"} // Old button messages keep working
  if hasEpisodes(session.Files){_,_=c.Answer(bot,nil);return nil}
  groups,err:=directMovieGroupsFromDB(session.Files)
  if err!=nil{
