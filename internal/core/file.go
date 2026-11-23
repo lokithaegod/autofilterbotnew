@@ -40,7 +40,10 @@ func NewFile(bot *gotgbot.Bot, ctx *ext.Context) error {
     // because the movie index strips extensions during ingestion.
     isVideo := m.Video!=nil || (m.Document!=nil && captiontags.IsVideoUpload(m.Document.FileName,false))
     if isVideo && captiontags.IsTagged(m.Caption) {
-        if err:=_app.DB.SetMalayalamCaptionTag(file.UniqueId,true);err!=nil{
+        name:=file.FileName
+        size:=file.FileSize
+        if m.Document!=nil{name=m.Document.FileName;size=m.Document.FileSize} else if m.Video!=nil{name=m.Video.FileName;size=m.Video.FileSize}
+        if _,err:=_app.DB.SetMalayalamCaptionTagForMedia(file.UniqueId,name,size,true);err!=nil{
             _app.Log.Warn("newfile: failed saving Malayalam caption tag",zap.Error(err))
         }
     }

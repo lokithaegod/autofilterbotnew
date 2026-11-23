@@ -21,22 +21,26 @@ func EditedMovieCaption(bot *gotgbot.Bot,ctx *ext.Context)error{
   return nil
  }
  var uniqueID,name string
+ var size int64
  isVideo:=false
  if m.Video!=nil{
   uniqueID=m.Video.FileUniqueId
   name=m.Video.FileName
+  size=m.Video.FileSize
   isVideo=true
  }else if m.Document!=nil{
   uniqueID=m.Document.FileUniqueId
   name=m.Document.FileName
+  size=m.Document.FileSize
   isVideo=captiontags.IsVideoUpload(name,false)
  }
  if !isVideo || uniqueID=="" {return nil}
  enabled:=captiontags.IsTagged(m.Caption)
- if err:=_app.DB.SetMalayalamCaptionTag(uniqueID,enabled);err!=nil{
+ linked,err:=_app.DB.SetMalayalamCaptionTagForMedia(uniqueID,name,size,enabled)
+ if err!=nil{
   _app.Log.Warn("edited movie caption tag update failed",zap.Error(err))
   return err
  }
- _app.Log.Info("edited movie caption tag processed",zap.Int64("chat_id",m.Chat.Id),zap.String("file_name",name),zap.Bool("malayalam_sub",enabled))
+ _app.Log.Info("edited movie caption tag processed",zap.Int64("chat_id",m.Chat.Id),zap.String("file_name",name),zap.Bool("malayalam_sub",enabled),zap.Int("linked_record_ids",linked))
  return nil
 }
