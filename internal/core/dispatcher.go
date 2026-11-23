@@ -74,6 +74,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCommand("broadcast", Broadcast), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("index", CmdIndex), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("updateindex", AutoIndexLast), commandHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewCommand("refreshmalayalamsub", RefreshMalayalamSub), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("setwelcome", SetWelcome), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("resetwelcome", ResetWelcome), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("setwelcomebutton", SetWelcomeButton), commandHandlerGroup)
