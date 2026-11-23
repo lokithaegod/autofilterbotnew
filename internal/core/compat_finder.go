@@ -100,11 +100,16 @@ func runCompatibilityProbe(subtitlePath,videoPath string)compatProbeResult{
  return result
 }
 
-func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID string)error{
+func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID,hint string)error{
  if !subtitles.Supported(filename)||!strings.EqualFold(filepath.Ext(filename),".srt"){
   _,err:=bot.SendMessage(chatID,"Please select a .srt subtitle file.",nil);return err
  }
- videos,err:=_app.DB.FindCompatibilityCandidates(filename)
+ searchName:=filename
+ _,_,hasIdentity:=compatfinder.Identity(filename)
+ if !hasIdentity && strings.TrimSpace(hint)!=""{
+  searchName=strings.TrimSpace(hint)+".srt"
+ }
+ videos,err:=_app.DB.FindCompatibilityCandidates(searchName)
  if err!=nil{
   _,sendErr:=bot.SendMessage(chatID,"Cannot search every movie record: "+err.Error(),nil)
   return sendErr
@@ -121,7 +126,7 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID s
  const maxAudioChecks=12 // Bound expensive audio work in each user request.
  analyzed:=0
  for _,video:=range videos{
-  status,reason:=compatfinder.Classify(filename,video.FileName)
+  status,reason:=compatfinder.Classify(searchName,video.FileName)
   if status=="unverified"&&video.FileType=="document"{
    reason="Legacy document file extension is unavailable; type not confirmed"
   }
@@ -152,7 +157,7 @@ func findCompatibleVideos(bot *gotgbot.Bot,chatID,userID int64,filename,fileID s
   {"incompatible","❌ INCOMPATIBLE"},
   {"unverified","❔ OTHER FILES — NOT YET VERIFIED"},
  }
- title,year,_:=compatfinder.Identity(filename)
+ title,year,_:=compatfinder.Identity(searchName)
  header:=fmt.Sprintf("🎬 MOVIE: %s (%s)\n📄 SELECTED SRT: %s\nCandidate records: %d\nAudio analyzed: %d\n",
   title,year,filename,len(videos),analyzed)
  if selected==""{header+="\nSubtitle content unavailable to analyzer: verification was not run.\n"}
@@ -186,11 +191,13 @@ func FindCompatibleCommand(bot *gotgbot.Bot,ctx *ext.Context)error{
  blocked,err:=_app.DB.IsUserBlocked(m.From.Id)
  if err!=nil||blocked{return err}
  if m.ReplyToMessage==nil||m.ReplyToMessage.Document==nil{
-  _,err=bot.SendMessage(m.Chat.Id,"Reply to a Malayalam .srt file with /findcompatible, or use Find Compatible Videos in the subtitles section.",nil)
+  _,err=bot.SendMessage(m.Chat.Id,"Reply to an SRT with /findcompatible [movie title year]. You can also attach the movie title and year as the SRT caption, or use Find Compatible Videos in the subtitles section.",nil)
   return err
  }
  doc:=m.ReplyToMessage.Document
- return findCompatibleVideos(bot,m.Chat.Id,m.From.Id,doc.FileName,doc.FileId)
+ hint:=""
+ if parts:=strings.SplitN(m.Text," ",2);len(parts)==2{hint=parts[1]}
+ return findCompatibleVideos(bot,m.Chat.Id,m.From.Id,doc.FileName,doc.FileId,hint)
 }
 
 // A selected existing subtitle record reuses its Telegram file ID, not a new record.
@@ -210,7 +217,7 @@ func FindCompatibleSubtitleCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  entry,err:=_app.DB.GetSubtitle(raw[:pos])
  if err!=nil{return err}
  _,_=c.Answer(bot,nil)
- return findCompatibleVideos(bot,c.Message.GetChat().Id,c.From.Id,entry.FileName,entry.FileID)
+ return findCompatibleVideos(bot,c.Message.GetChat().Id,c.From.Id,entry.FileName,entry.FileID,"")
 }
 
 // A directly sent private SRT can start the finder without saving it to Mongo.
@@ -220,6 +227,6 @@ func FindCompatibleIncomingSRT(bot *gotgbot.Bot,ctx *ext.Context)error{
  if m.Chat.Type!="private"{return nil}
  blocked,err:=_app.DB.IsUserBlocked(m.From.Id)
  if err!=nil||blocked{return err}
- return findCompatibleVideos(bot,m.Chat.Id,m.From.Id,m.Document.FileName,m.Document.FileId)
+ return findCompatibleVideos(bot,m.Chat.Id,m.From.Id,m.Document.FileName,m.Document.FileId,m.Caption)
 }
 
