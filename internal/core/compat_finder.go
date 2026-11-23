@@ -2,6 +2,8 @@ package core
 
 import (
  "context"
+ "crypto/sha256"
+ "sync"
  "encoding/json"
  "fmt"
  "io"
@@ -14,8 +16,6 @@ import (
  "time"
 
  "github.com/Jisin0/autofilterbot/internal/compatfinder"
- "github.com/Jisin0/autofilterbot/internal/fsub"
- "github.com/Jisin0/autofilterbot/internal/model"
  "github.com/Jisin0/autofilterbot/internal/subtitles"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -62,11 +62,24 @@ type compatProbeResult struct {
  Offset float64 `json:"offset_seconds"`
  Drift float64 `json:"drift_seconds"`
 }
+var compatibleProbeCache = struct{
+ sync.Mutex
+ entries map[string]compatProbeResult
+}{entries:make(map[string]compatProbeResult)}
+
 func runCompatibilityProbe(subtitlePath,videoPath string)compatProbeResult{
  if videoPath==""||!filepath.IsAbs(videoPath){return compatProbeResult{Status:"unverified",Reason:"No authorized local media path for audio analysis"}}
- if info,err:=os.Stat(videoPath);err!=nil||!info.Mode().IsRegular(){
+ info,statErr:=os.Stat(videoPath)
+ if statErr!=nil||!info.Mode().IsRegular(){
   return compatProbeResult{Status:"unverified",Reason:"Video is not accessible on the analysis host"}
  }
+ subtitleBytes,err:=os.ReadFile(subtitlePath)
+ if err!=nil{return compatProbeResult{Status:"unverified",Reason:"Cannot read subtitle bytes"}}
+ key:=fmt.Sprintf("%x|%s|%d|%d",sha256.Sum256(subtitleBytes),videoPath,info.Size(),info.ModTime().UnixNano())
+ compatibleProbeCache.Lock()
+ cached,ok:=compatibleProbeCache.entries[key]
+ compatibleProbeCache.Unlock()
+ if ok{return cached}
  ctx,cancel:=context.WithTimeout(context.Background(),4*time.Minute)
  defer cancel()
  out,err:=exec.CommandContext(ctx,"python3","scripts/compatibility_probe.py",
@@ -76,6 +89,10 @@ func runCompatibilityProbe(subtitlePath,videoPath string)compatProbeResult{
  if json.Unmarshal(out,&result)!=nil{return compatProbeResult{Status:"unverified",Reason:"Invalid audio analysis output"}}
  switch result.Status{case "verified","needs_sync","incompatible","unverified":
  default:return compatProbeResult{Status:"unverified",Reason:"Unknown analysis state"}}
+ compatibleProbeCache.Lock()
+ if len(compatibleProbeCache.entries)>=256{clear(compatibleProbeCache.entries)}
+ compatibleProbeCache.entries[key]=result
+ compatibleProbeCache.Unlock()
  return result
 }
 
@@ -197,7 +214,3 @@ func FindCompatibleIncomingSRT(bot *gotgbot.Bot,ctx *ext.Context)error{
  return findCompatibleVideos(bot,m.Chat.Id,m.From.Id,m.Document.FileName,m.Document.FileId)
 }
 
-// Explicitly reference existing media model to preserve the database's
-// established file identity semantics.
-var _ *model.File
-var _ = fsub.CheckFsub
