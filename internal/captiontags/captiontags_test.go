@@ -9,7 +9,8 @@ func TestIsTagged(t *testing.T){
   {"MALAYALAM_SUB",true},
   {"Movie Name\nMalayalam Subs",true},
   {"English Sub",false},
-  {"No Malayalam subtitles available",true}, // keywords alone are a declaration; avoid negating claims in captions.
+  {"No Malayalam subtitles available",false},
+  {"Without Malayalam Sub",false},
   {"Malayalam Subscription",false},
   {"",false},
  }
