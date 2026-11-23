@@ -54,6 +54,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewMessage(message.Private, PrivateLastFile), autofilterHandlerGroup)
 
 	d.AddHandlerToGroup(handlers.NewCommand("start", StartCommand), commandHandlerGroup)
+ d.AddHandlerToGroup(handlers.NewCommand("subtitles", SubtitlesCommand), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"about", "help", "privacy"}, StaticCommands), commandHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewCommand("delete", DeleteFile).SetAllowChannel(true), commandHandlerGroup)
 	d.AddHandlerToGroup(exthandlers.NewCommands([]string{"deleteall", "delall"}, DeleteAllFiles), commandHandlerGroup)
@@ -80,6 +81,9 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCommand("resetwelcomebuttons", ResetWelcomeButtons), commandHandlerGroup)
 
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("cmd"), StaticCommands), callbackQueryGroup)
+ d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Equal("msmenu"), SubtitlesMenu), callbackQueryGroup)
+ d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("msend|"), SubtitleSendCallback), callbackQueryGroup)
+ d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("msmovie|"), SubtitleMovieCallback), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("close"), Close), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("navg"), Navigate), callbackQueryGroup)
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("fdetails"), FileDetails), callbackQueryGroup)
@@ -97,6 +101,13 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("browse"), BrowseCallback), callbackQueryGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(exthandlers.ChatIds(env.Int64s("FILE_CHANNELS")), NewFile), miscHandlerGroup)
+ // Only register a subtitle channel when explicitly configured and distinct from movie sources.
+ for _,subtitleID:=range env.Int64s("SUBTITLE_CHANNEL_ID") {
+  overlap:=false
+  for _,movieID:=range env.Int64s("FILE_CHANNELS"){if subtitleID==movieID{overlap=true;break}}
+  if overlap {log.Warn("subtitle channel overlaps movie file channel; subtitle handler skipped");continue}
+  d.AddHandlerToGroup(handlers.NewMessage(exthandlers.ChatIds([]int64{subtitleID}), NewSubtitle), miscHandlerGroup)
+ }
 	d.AddHandlerToGroup(handlers.NewChatJoinRequest(func(cjr *gotgbot.ChatJoinRequest) bool { return true }, HandleJoinRequest), joinRequestGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(message.All, conversation.MessageHandler), middleWareGroup)
