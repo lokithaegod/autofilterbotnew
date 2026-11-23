@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/base64"
 	"fmt"
+ "strings"
 	"time"
 
 	"github.com/Jisin0/autofilterbot/internal/autofilter"
@@ -37,14 +38,23 @@ func StartCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
 		return StaticCommands(bot, ctx)
 	}
 
-	bytes, err := base64.StdEncoding.DecodeString(split[1]) // any start data is expected to be base64 encoded
+	payload:=split[1]
+ if strings.HasPrefix(payload,"Retry_"){
+  fsub.RecordRetry()
+  payload=strings.TrimPrefix(payload,"Retry_")
+ }
+ bytes, err := base64.StdEncoding.DecodeString(payload) // original media token unchanged
 	if err != nil {
 		_app.Log.Warn("start: decode data failed", zap.Error(err))
 		return nil
 	}
 
 	data := string(bytes)
-	switch data[0] {
+ if len(data)==0 {
+  _app.Log.Warn("start: decoded an empty deep-link payload")
+  return nil
+ }
+ switch data[0] {
 	case DataPrefixFile:
 		ok, err := fsub.CheckFsub(_app, bot, ctx)
 		if err != nil {

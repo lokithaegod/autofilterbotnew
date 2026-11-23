@@ -7,8 +7,7 @@ import (
 
 	"github.com/Jisin0/autofilterbot/internal/button"
 	"github.com/Jisin0/autofilterbot/internal/config"
-	"github.com/Jisin0/autofilterbot/internal/database"
-	"github.com/Jisin0/autofilterbot/internal/database/mongo"
+		"github.com/Jisin0/autofilterbot/internal/database/mongo"
 	"github.com/Jisin0/autofilterbot/internal/format"
 	"github.com/Jisin0/autofilterbot/internal/model"
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -50,81 +49,24 @@ func IsMember(bot *gotgbot.Bot, chatId, userId int64) (bool, error) {
 	}
 }
 
-// HasJoinRequest reports wether the user has a join request pending for the channel saved in the db.
-//
-// - db: database client.
-// - userId: id of user to check.
-//
-// NOTE: On db level error returns true and error.
-func HasJoinRequest(db database.Database, chatId, userId int64) (bool, error) {
-	user, err := db.GetUser(userId)
-	if err != nil {
-		return true, err
-	}
-
-	for _, c := range user.JoinRequests {
-		if chatId == c {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-// GetNotMemberOrRequest returns all channels the user is not a member of or has pending join request.
-//
-// - bot: bot client to make api requests.
-// - db: database client.
-// - f: fsub channels from config.
-// - userId: id of user to check.
-//
-// Returns slice of channels user is not a member. Error returned will be any API call or DB query failure.
+// GetNotMemberOrRequest requires current verified membership in every channel.
+// Historical join-request records are deliberately ignored: they do not prove
+// the request is still pending and must never bypass ForceSub.
 func GetNotMemberOrRequest(bot *gotgbot.Bot, db *mongo.Client, f []model.Channel, userId int64) ([]model.Channel, error) {
-	var (
-		user      *model.User
-		allErrors []error
-		notJoined = make([]model.Channel, 0)
-	)
-
-	for _, c := range f {
-		isMember, err := IsMember(bot, c.ID, userId)
-		if err != nil {
-			allErrors = append(allErrors, err) // Membership cannot be verified; do not grant access.
-			continue
-		}
-
-		if isMember {
-			continue
-		}
-
-		if user == nil {
-			user, err = db.GetUserJoinRequests(userId)
-			if database.IsNoDocumentsError(err) {
-				// A normal new user has no join-request record. Treat as no pending requests.
-				user = &model.User{}
-			} else if err != nil {
-				allErrors = append(allErrors, err)
-				continue
-			}
-		}
-
-		var hasJoinRequest bool
-
-		for _, id := range user.JoinRequests {
-			if id == c.ID {
-				hasJoinRequest = true
-				break
-			}
-		}
-
-		if hasJoinRequest {
-			continue
-		}
-
-		notJoined = append(notJoined, c)
-	}
-
-	return notJoined, errors.Join(allErrors...)
+ _ = db // Kept in the signature to avoid changing existing integrations.
+ var errs []error
+ missing := make([]model.Channel, 0, len(f))
+ for _, channel := range f {
+  metricsMembershipChecks.Add(1)
+  joined, err := IsMember(bot, channel.ID, userId)
+  if err != nil {
+   metricsMembershipErrors.Add(1)
+   errs = append(errs, fmt.Errorf("channel %d: %w", channel.ID, err))
+   continue
+  }
+  if !joined { missing = append(missing, channel) }
+ }
+ return missing, errors.Join(errs...)
 }
 
 type appPreview interface {
@@ -141,6 +83,7 @@ type appPreview interface {
 //
 // NOTE: true will be returned incase of an error.
 func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error) {
+ metricsChecks.Add(1)
 	var (
 		userID int64
 		chatID int64
@@ -160,6 +103,7 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 
 	notJoined, err := GetNotMemberOrRequest(bot, app.GetDB(), app.GetConfig().GetFsubChannels(), userID)
 	if err != nil {
+  metricsErrors.Add(1)
 		// Never send files if Telegram membership or the database cannot be checked.
 		if ctx.InlineQuery != nil {
 			_, _ = ctx.InlineQuery.Answer(bot, []gotgbot.InlineQueryResult{}, &gotgbot.AnswerInlineQueryOpts{CacheTime: 0})
@@ -170,10 +114,12 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 	}
 
 	if len(notJoined) == 0 {
+  metricsPassed.Add(1)
 		return true, nil
 	}
 
-	var btns [][]gotgbot.InlineKeyboardButton
+	metricsBlocked.Add(1)
+ var btns [][]gotgbot.InlineKeyboardButton
 
 	switch len(notJoined) {
 	case 1:
@@ -196,14 +142,17 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 
 	switch {
 	case ctx.Message != nil:
-		retryButton.Url = fmt.Sprintf("https://t.me/%s?start=%s", bot.Username, ctx.Args()[1])
+  // Retain the original deep-link payload if one was supplied. Never index
+  // Args()[1] on /start without an argument.
+  retryButton.Url=RetryDeepLink(bot.Username,ctx.Args())
 	case ctx.CallbackQuery != nil:
 		retryButton.CallbackData = ctx.CallbackQuery.Data
 	case ctx.InlineQuery != nil:
 		retryButton.SwitchInlineQueryCurrentChat = &ctx.InlineQuery.Query
 	}
 
-	btns = append(btns,
+	metricsJoinPrompts.Add(1)
+ btns = append(btns,
 		[]gotgbot.InlineKeyboardButton{
 			button.Close(userID),
 			retryButton,
@@ -235,4 +184,16 @@ func CheckFsub(app appPreview, bot *gotgbot.Bot, ctx *ext.Context) (bool, error)
 	)
 
 	return false, pkgerrors.Wrap(err, "fsub: send fsub message failed: ")
+}
+
+// RetryDeepLink keeps the original payload intact. A Retry_ prefix lets
+// /start count actual retry visits without relying on user identifiers.
+// Telegram start parameters cannot exceed 64 characters.
+func RetryDeepLink(username string,args []string)string{
+ if len(args)<2||args[1]==""{return fmt.Sprintf("https://t.me/%s?start",username)}
+ raw:=strings.TrimPrefix(args[1],"Retry_")
+ if len(raw)+len("Retry_")<=64{
+  return fmt.Sprintf("https://t.me/%s?start=Retry_%s",username,raw)
+ }
+ return fmt.Sprintf("https://t.me/%s?start=%s",username,raw)
 }
