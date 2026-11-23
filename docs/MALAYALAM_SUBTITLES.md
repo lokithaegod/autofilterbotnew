@@ -87,3 +87,46 @@ offered by a separate bot or webpage does not establish that all
 versions are in sync. For a validated result, test opening the
 actual .srt and movie in a player and checking timestamps at the
 beginning, middle and end.
+
+## Malayalam Sub video caption tagging (development branch)
+
+In your **existing movie storage channel**, upload a video and write this caption:
+
+`Malayalam Sub`
+
+The caption detector also recognizes `Malayalam subtitle`,
+`Malayalam Subs`, and `Malayalam subtitles` (case-insensitive).
+To avoid accidental tagging, it excludes explicitly negative labels such as
+`No Malayalam subtitles available`.
+
+The new video-post handler uses the **original Telegram document filename** to
+recognize .mkv, .mp4, .avi, .mov, .webm, .m4v, .ts, and .wmv uploads, plus
+native Telegram video media. It does not tag SRT, ASS, VTT or arbitrary ZIP
+documents.
+
+The existing movie record remains untouched. A separate
+`MalayalamCaptionTags` collection contains only the original
+`file_unique_id` and a boolean manual-suitability marker; repeated uploads
+are idempotent.
+
+Within each movie card users can choose:
+
+- **✅ Malayalam Sub Available** — exact movie file IDs manually tagged
+  by a storage-channel caption
+- **🎬 Other Files** — movie files not so tagged
+- **🎬 All Files** — the existing unchanged movie results
+
+The SRT compatibility finder also lists these under a **manual-caption** heading,
+separate from **audio-verified** synchronization matches.
+
+**Important limitations**:
+- These are **manual declarations**, not audio synchronization evidence.
+- Captions must be present on **new incoming channel posts** for the
+  current handler to index them. Caption edits to older posts and old
+  existing MongoDB records are **not automatically backfilled**.
+- Tags are keyed to the Telegram file's immutable unique ID; multiple
+  source posts of the same Telegram file reuse one tag.
+- No changes are made to movie filenames, file IDs, the original movie
+  collection, existing commands or the overnight schedule.
+- A deployment of the development branch would create the separate tag
+  collection when a new caption-tagged upload is received.
