@@ -36,8 +36,7 @@ type directMovieGroups struct {
 }
 
 func isMovieSubtitleDocument(name string)bool{
- return isSubtitleFile(name)||isMalayalamSubtitleArchive(name)||
-  (strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)),".zip")&&englishSRTMarker.MatchString(name))
+ return isSubtitleFile(name)||strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)),".zip")
 }
 
 func isEnglishMarked(name string)bool{
@@ -85,7 +84,7 @@ func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)direc
   switch{
   case isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]):
    if subtitle{g.MalayalamSubs=append(g.MalayalamSubs,f)}else{g.MalayalamVideos=append(g.MalayalamVideos,f)}
-  case isTamilDubbedVideo(f.FileName):
+  case (videoExtension.MatchString(f.FileName)||f.FileType=="video") && isTamilDubbedVideo(f.FileName):
    g.TamilVideos=append(g.TamilVideos,f)
   default:
    if subtitle{g.EnglishSubs=append(g.EnglishSubs,f)}else{g.EnglishVideos=append(g.EnglishVideos,f)}
