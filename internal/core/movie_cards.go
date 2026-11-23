@@ -23,6 +23,14 @@ var movieWord = regexp.MustCompile(`[^a-z0-9]+`)
 // duplicate cards for e.g. "Inception.2010" and "@CC Links Inception.2010".
 var movieLeadingCC = regexp.MustCompile(`(?i)^(?:[._ -]*\[cc\][._ -]*|[._ -]*@cc[._ -]*links[._ -]*|[._ -]*@cc_links[._ -]*|[._ -]*@moviezday[._ -]*)+`)
 
+// Malayalam subtitle archives are downloadable documents, like Malayalam SRTs.
+// Only a clear Malayalam name on a .zip is sufficient; generic ZIPs remain "More Files".
+func isMalayalamSubtitleArchive(name string) bool {
+ lower:=strings.ToLower(strings.TrimSpace(name))
+ if !strings.HasSuffix(lower,".zip"){return false}
+ return strings.Contains(lower,"മലയാളം") || strings.Contains(lower,"malayalam")
+}
+
 type movieCard struct {
  Title string
  Year string
@@ -65,9 +73,9 @@ func buildMovieCards(pages []autofilter.Files) []movieCard {
    }
    c:=&cards[i]
    switch {
-   case isSubtitleFile(file.FileName):
+   case isSubtitleFile(file.FileName) || isMalayalamSubtitleArchive(file.FileName):
     c.Subs=append(c.Subs,file)
-    if isMalayalamSubtitle(file.FileName){c.MalayalamSubs++}
+    if isMalayalamSubtitle(file.FileName) || isMalayalamSubtitleArchive(file.FileName){c.MalayalamSubs++}
    case videoExtension.MatchString(file.FileName):
     c.Videos=append(c.Videos,file)
    default:
@@ -159,8 +167,8 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  for _,f:=range movieFiles{
   // A Malayalam SRT is a downloadable subtitle document, not a video claim.
   // Videos are suitable only when the owner added the explicit caption tag.
-  if isSubtitleFile(f.FileName) {
-   if isMalayalamSubtitle(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+  if isSubtitleFile(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {
+   if isMalayalamSubtitle(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
   } else if tagged[f.UniqueId] {
    captionTagged=append(captionTagged,f)
   } else {
