@@ -121,12 +121,15 @@ separate from **audio-verified** synchronization matches.
 
 **Important limitations**:
 - These are **manual declarations**, not audio synchronization evidence.
-- Captions must be present on **new incoming channel posts** for the
-  current handler to index them. Caption edits to older posts and old
-  existing MongoDB records are **not automatically backfilled**.
+- New channel posts are indexed immediately. **Edits to captions on
+  existing channel video posts are also recognized**, if Telegram delivers
+  `edited_channel_post` updates to the bot. Older captions that are never
+  edited still require a separate historical backfill, which is not included.
 - Tags are keyed to the Telegram file's immutable unique ID; multiple
   source posts of the same Telegram file reuse one tag.
 - No changes are made to movie filenames, file IDs, the original movie
   collection, existing commands or the overnight schedule.
 - A deployment of the development branch would create the separate tag
   collection when a new caption-tagged upload is received.
+
+For a previously uploaded movie, edit its channel caption after deployment to include `Malayalam Sub`; the edited-channel-post handler records the tag. Removing this phrase in an edit removes its manual tag. This never rewrites the existing movie file record. Verify that your Telegram bot receives `edited_channel_post` updates.
