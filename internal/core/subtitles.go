@@ -6,6 +6,7 @@ import (
  "strings"
 
  "github.com/Jisin0/autofilterbot/internal/subtitles"
+ "github.com/Jisin0/autofilterbot/internal/fsub"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
  "go.uber.org/zap"
@@ -97,6 +98,8 @@ func SubtitleSendCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  }
  blocked,err:=_app.DB.IsUserBlocked(c.From.Id)
  if err!=nil||blocked{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Access unavailable",ShowAlert:true});return nil}
+ joined,err:=fsub.CheckFsub(_app,bot,ctx)
+ if err!=nil || !joined{return nil}
  entry,err:=_app.DB.GetSubtitle(payload[:idx])
  if err!=nil{
   _,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Subtitle no longer available",ShowAlert:true})
