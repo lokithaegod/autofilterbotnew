@@ -168,7 +168,9 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
   // A Malayalam SRT is a downloadable subtitle document, not a video claim.
   // Videos are suitable only when the owner added the explicit caption tag.
   if isSubtitleFile(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {
-   if isMalayalamSubtitle(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
+   // Admin-forwarded SRTs may not say Malayalam in the original filename.
+   // An explicit owner tag takes precedence over filename heuristics.
+   if tagged[f.UniqueId] || isMalayalamSubtitle(f.FileName) || isMalayalamSubtitleArchive(f.FileName) {captionTagged=append(captionTagged,f)} else {captionOther=append(captionOther,f)}
   } else if tagged[f.UniqueId] {
    captionTagged=append(captionTagged,f)
   } else {
