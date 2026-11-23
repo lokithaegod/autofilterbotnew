@@ -2,6 +2,8 @@ package mongo
 
 import (
  "context"
+
+ "github.com/Jisin0/autofilterbot/internal/functions"
  "time"
 
  "go.mongodb.org/mongo-driver/bson"
@@ -46,3 +48,38 @@ func (c *Client) FindMalayalamCaptionTags(uniqueIDs []string)(map[string]bool,er
  }
  return tagged,cursor.Err()
 }
+
+// SetMalayalamCaptionTagForMedia bridges Telegram Bot API file_unique_id and
+// older database file IDs (which can differ for independently indexed copies).
+// No original file document is modified. Matching requires both the exact
+// filename (raw or historical sanitized form) AND the exact byte size.
+func (c *Client) SetMalayalamCaptionTagForMedia(uniqueID, filename string, size int64, enabled bool) (int,error) {
+ if uniqueID==""{return 0,mongo.ErrNoDocuments}
+ linked:=map[string]bool{uniqueID:true}
+ if filename!=""&&size>0{
+  variations:=[]string{filename,functions.RemoveSymbols(functions.RemoveExtension(filename))}
+  // Old file rows can contain either a full file extension or sanitized name.
+  filter:=bson.M{"file_name":bson.M{"$in":variations},"file_size":size}
+  ctx,cancel:=context.WithTimeout(context.Background(),12*time.Second)
+  defer cancel()
+  for _,coll:=range c.fileCollection.allCollections{
+   cursor,err:=coll.Find(ctx,filter,options.Find().SetProjection(bson.M{"_id":1}).SetLimit(100))
+   if err!=nil{return 0,err}
+   for cursor.Next(ctx){
+    var row struct{ID string `bson:"_id"`}
+    if err:=cursor.Decode(&row);err!=nil{cursor.Close(ctx);return 0,err}
+    if row.ID!=""{linked[row.ID]=true}
+   }
+   err=cursor.Err()
+   cursor.Close(ctx)
+   if err!=nil{return 0,err}
+  }
+ }
+ count:=0
+ for candidate:=range linked{
+  if err:=c.SetMalayalamCaptionTag(candidate,enabled);err!=nil{return count,err}
+  count++
+ }
+ return count,nil
+}
+
