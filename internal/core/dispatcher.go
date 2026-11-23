@@ -98,6 +98,7 @@ func SetupDispatcher(log *zap.Logger) *ext.Dispatcher {
 	d.AddHandlerToGroup(handlers.NewCallback(callbackquery.Prefix("browse"), BrowseCallback), callbackQueryGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(exthandlers.ChatIds(env.Int64s("FILE_CHANNELS")), NewFile), miscHandlerGroup)
+	d.AddHandlerToGroup(handlers.NewMessage(message.Private, MarkForwardedMalayalam), miscHandlerGroup)
 	d.AddHandlerToGroup(handlers.NewChatJoinRequest(func(cjr *gotgbot.ChatJoinRequest) bool { return true }, HandleJoinRequest), joinRequestGroup)
 
 	d.AddHandlerToGroup(handlers.NewMessage(message.All, conversation.MessageHandler), middleWareGroup)
