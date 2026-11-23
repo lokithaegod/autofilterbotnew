@@ -200,9 +200,20 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 	)
 
 	if !hasEpisodes(files) {
-        // Default movie searches to one title card per film. Original file
-        // results and all existing filters remain one tap away.
-        buttons=movieCardsKeyboard(uniqueId,buildMovieCards(files),0)
+        // Movie results open directly with approved Malayalam videos, then
+        // separate subtitle documents. English claims require explicit labels.
+        groups,groupErr:=directMovieGroupsFromDB(files)
+        if groupErr!=nil {
+            // Never silently imply a video is not Malayalam when its saved
+            // manual tag could not be read.
+            _app.Log.Warn("autofilter: movie language tags unavailable",zap.Error(groupErr))
+            buttons=append(buttons,[]gotgbot.InlineKeyboardButton{{Text:"⚠️ Language tags unavailable — original files below",CallbackData:"ignore"}})
+            buttons=append(buttons,headerRow(uniqueId,0))
+            buttons=append(buttons,files[0].Process(inputMessage.GetChat().Id,bot.Username,_app.Config)...)
+            buttons=append(buttons,footerRow(uniqueId,0,len(files)))
+        } else {
+            buttons=directFileKeyboard(uniqueId,groups,groups.firstKind(),0,inputMessage.GetChat().Id,bot.Username,_app.Config)
+        }
     } else {
         buttons = append(buttons, headerRow(uniqueId, 0))
         buttons = append(buttons, filterButton(uniqueId))
