@@ -9,7 +9,7 @@ import (
 )
 
 var space=regexp.MustCompile(`\s+`)
-var negation=regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:no|without|not[\\s._-]*available)[\\s._-]+malayalam[\\s._-]*(?:sub|subs|subtitle|subtitles)(?:$|[^a-z0-9])`)
+var negation=regexp.MustCompile(\`(?i)(?:^|[^a-z0-9])(?:no|without|not[\s._-]*available)[\s._-]+malayalam[\s._-]*(?:sub|subs|subtitle|subtitles)(?:$|[^a-z0-9])\`)
 var marker=regexp.MustCompile(`(?i)(?:^|[^a-z0-9])malayalam[\s._-]*(?:sub|subs|subtitle|subtitles)(?:$|[^a-z0-9])`)
 
 // IsTagged matches "Malayalam Sub" in a video's Telegram caption.
