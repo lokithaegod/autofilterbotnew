@@ -12,6 +12,7 @@ import (
 var publicBotCommands = []gotgbot.BotCommand{
  {Command:"start", Description:"Start the bot"},
  {Command:"help", Description:"How to search and receive files"},
+ {Command:"howtodownload",Description:"Step-by-step download instructions"},
  {Command:"browse", Description:"Browse movies, series and files"},
  {Command:"find", Description:"Advanced file search"},
  {Command:"movie", Description:"Movie information"},
@@ -28,6 +29,11 @@ var adminBotCommands = append(append([]gotgbot.BotCommand{},publicBotCommands...
  gotgbot.BotCommand{Command:"index",Description:"Index channel files"},
  gotgbot.BotCommand{Command:"updateindex",Description:"Index new channel posts"},
  gotgbot.BotCommand{Command:"broadcast",Description:"Admin broadcast"},
+ gotgbot.BotCommand{Command:"addglobalfilter",Description:"Add keyword reply: keyword | text"},
+ gotgbot.BotCommand{Command:"globalfilters",Description:"List saved global keyword replies"},
+ gotgbot.BotCommand{Command:"addwelcomephoto",Description:"Reply to a photo to add welcome image"},
+ gotgbot.BotCommand{Command:"listwelcomephotos",Description:"Count rotating welcome images"},
+ gotgbot.BotCommand{Command:"duplicates",Description:"Read-only indexed duplicate report"},
 )
 
 // Telegram only displays admin commands in each configured admin's private chat.

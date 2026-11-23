@@ -35,7 +35,7 @@ func StartCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	split := ctx.Args()
 	if len(split) < 2 {
-		return StaticCommands(bot, ctx)
+        return sendRandomWelcome(bot,ctx)
 	}
 
 	payload:=split[1]
