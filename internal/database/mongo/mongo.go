@@ -25,7 +25,6 @@ type Client struct {
 	joinRequestsCollection *mongo.Collection
 	// fileCollection stores all saved files.
 	fileCollection *MultiCollection
- subtitleCollection *mongo.Collection
 	// configCollection stores settings configuration of the bot.
 	configCollection *mongo.Collection
 	// groupCollection contains data about group chats.
@@ -103,15 +102,12 @@ func NewClient(ctx context.Context, mongodbUri string, log *zap.Logger, opts ...
 		db:                     dataBase,
 		userCollection:         dataBase.Collection(database.CollectionNameUsers),
 		fileCollection:         fileCollection,
-  subtitleCollection: dataBase.Collection("MalayalamSubtitles"),
 		configCollection:       dataBase.Collection(database.CollectionNameConfigs),
 		groupCollection:        dataBase.Collection(database.CollectionNameGroups),
 		opsCollection:          dataBase.Collection(database.CollectionNameOperations),
 		joinRequestsCollection: dataBase.Collection(database.CollectionNameJoinRequests),
 	}
 
-	_, err = client.subtitleCollection.Indexes().CreateOne(ctx, mongo.IndexModel{Keys:bson.D{{Key:"title_key",Value:1},{Key:"year",Value:1}}})
- if err!=nil{log.Warn("subtitle index creation failed; continuing without index",zap.Error(err))}
 	return client, nil
 }
 
