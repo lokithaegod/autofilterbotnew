@@ -16,7 +16,10 @@ func EditedMovieCaption(bot *gotgbot.Bot,ctx *ext.Context)error{
  m:=ctx.Update.EditedChannelPost
  authorized:=false
  for _,id:=range env.Int64s("FILE_CHANNELS"){if id==m.Chat.Id{authorized=true;break}}
- if !authorized{return nil}
+ if !authorized{
+  _app.Log.Debug("edited movie caption ignored: channel not in FILE_CHANNELS",zap.Int64("chat_id",m.Chat.Id))
+  return nil
+ }
  var uniqueID,name string
  isVideo:=false
  if m.Video!=nil{
@@ -34,5 +37,6 @@ func EditedMovieCaption(bot *gotgbot.Bot,ctx *ext.Context)error{
   _app.Log.Warn("edited movie caption tag update failed",zap.Error(err))
   return err
  }
+ _app.Log.Info("edited movie caption tag processed",zap.Int64("chat_id",m.Chat.Id),zap.String("file_name",name),zap.Bool("malayalam_sub",enabled))
  return nil
 }
