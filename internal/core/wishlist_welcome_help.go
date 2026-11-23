@@ -5,6 +5,7 @@ import (
  "math/rand"
  "strings"
 
+ "github.com/Jisin0/autofilterbot/internal/button"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
@@ -62,7 +63,7 @@ func sendRandomWelcome(bot *gotgbot.Bot,ctx *ext.Context)error {
  photo:=photos[rand.Intn(len(photos))]
  welcome:=_app.Config.GetStartMessage(bot.Username)
  welcome.Format(_app.BasicMessageValues(ctx))
- keyboard:=gotgbot.InlineKeyboardMarkup{InlineKeyboard:welcome.Keyboard}
+ keyboard:=gotgbot.InlineKeyboardMarkup{InlineKeyboard:button.UnwrapKeyboard(welcome.Keyboard)}
  _,err=bot.SendPhoto(ctx.EffectiveChat.Id,gotgbot.InputFileByID(photo),&gotgbot.SendPhotoOpts{
   Caption:welcome.Text,ParseMode:gotgbot.ParseModeHTML,ReplyMarkup:keyboard,
  })
