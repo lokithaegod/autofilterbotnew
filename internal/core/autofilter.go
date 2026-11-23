@@ -139,6 +139,9 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 
 	if ctx.Message != nil {
         if !CheckSearchAccess(bot,ctx) {return nil,nil}
+        handled,filterErr:=handleKeywordReply(bot,ctx)
+        if filterErr!=nil { _app.Log.Warn("keyword reply lookup failed",zap.Error(filterErr)) }
+        if handled{return nil,nil}
         _ = _app.DB.LogSearch(query)
     }
 	cursor, err := _app.DB.SearchFiles(query)
@@ -210,12 +213,14 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
             buttons=append(buttons,[]gotgbot.InlineKeyboardButton{{Text:"⚠️ Language tags unavailable — original files below",CallbackData:"ignore"}})
             buttons=append(buttons,headerRow(uniqueId,0))
             buttons=append(buttons,files[0].Process(inputMessage.GetChat().Id,bot.Username,_app.Config)...)
+            buttons=append(buttons,downloadHelpButton())
             buttons=append(buttons,footerRow(uniqueId,0,len(files)))
         } else {
             buttons=directFileKeyboard(uniqueId,groups,groups.firstKind(),0,inputMessage.GetChat().Id,bot.Username,_app.Config)
         }
     } else {
         buttons = append(buttons, headerRow(uniqueId, 0))
+        buttons = append(buttons, downloadHelpButton())
         buttons = append(buttons, filterButton(uniqueId))
         buttons = append(buttons, files[0].Process(inputMessage.GetChat().Id, bot.Username, _app.Config)...)
         buttons = append(buttons, footerRow(uniqueId, 0, len(files)))
