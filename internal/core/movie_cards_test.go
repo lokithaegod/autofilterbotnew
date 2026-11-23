@@ -105,3 +105,19 @@ func TestCastAwayBrandedFilesGroupIntoOneCard(t *testing.T) {
   }
  }
 }
+
+func TestMalayalamSRTIncludedInMalayalamSubFiles(t *testing.T) {
+ cards:=buildMovieCards([]autofilter.Files{{
+  mockFile("[CC].Cast.Away.2000.720p.BRRip.HEVC.mkv"),
+  mockFile("Cast.Away.2000.720p.BrRip.മലയാളം.srt"),
+  mockFile("Cast.Away.2000.English.srt"),
+ }})
+ if len(cards)!=1 {t.Fatalf("expected one movie card, got %d",len(cards))}
+ menu:=movieDetailKeyboard("abcdefghijklmno",0,0,cards[0],123,"AutofilterMGbot","all",&config.Config{})
+ if !strings.Contains(menu[1][0].Text,"Malayalam Sub Files (1)") {
+  t.Fatalf("Malayalam SRT must appear even without a video caption tag: %+v",menu)
+ }
+ if !strings.Contains(menu[2][0].Text,"More Files (2)") {
+  t.Fatalf("other untagged files should remain in More Files: %+v",menu)
+ }
+}
