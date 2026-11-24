@@ -83,3 +83,44 @@ func (c *Client) SetMalayalamCaptionTagForMedia(uniqueID, filename string, size 
  return count,nil
 }
 
+
+
+// TagIndexedMalayalamMedia marks only already-indexed records and reports
+// whether anything changed. A repeat forward returns newlyTagged=0.
+// Matching both name and byte size protects other releases from incorrect tags.
+func (c *Client) TagIndexedMalayalamMedia(uniqueID, filename string, size int64) (matched, newlyTagged int, err error) {
+ if uniqueID=="" || filename=="" || size<=0 {return 0,0,mongo.ErrNoDocuments}
+ variations:=[]string{filename,functions.RemoveSymbols(functions.RemoveExtension(filename))}
+ filter:=bson.M{"$or":[]bson.M{
+  {"_id":uniqueID},
+  {"file_name":bson.M{"$in":variations},"file_size":size},
+ }}
+ ctx,cancel:=context.WithTimeout(context.Background(),12*time.Second)
+ defer cancel()
+ indexed:=make(map[string]bool)
+ for _,coll:=range c.fileCollection.allCollections{
+  cursor,findErr:=coll.Find(ctx,filter,options.Find().SetProjection(bson.M{"_id":1}).SetLimit(100))
+  if findErr!=nil{return 0,0,findErr}
+  for cursor.Next(ctx){
+   var row struct{ID string `bson:"_id"`}
+   if decodeErr:=cursor.Decode(&row);decodeErr!=nil {cursor.Close(ctx);return 0,0,decodeErr}
+   if row.ID!="" {indexed[row.ID]=true}
+  }
+  cursorErr:=cursor.Err()
+  cursor.Close(ctx)
+  if cursorErr!=nil{return 0,0,cursorErr}
+ }
+ matched=len(indexed)
+ if matched==0{return 0,0,nil}
+ ids:=make([]string,0,matched)
+ for id:=range indexed{ids=append(ids,id)}
+ tagged,tagErr:=c.FindMalayalamCaptionTags(ids)
+ if tagErr!=nil{return matched,0,tagErr}
+ for _,id:=range ids{
+  if tagged[id]{continue}
+  // This upsert is idempotent, including if two forwards race.
+  if tagErr=c.SetMalayalamCaptionTag(id,true);tagErr!=nil{return matched,newlyTagged,tagErr}
+  newlyTagged++
+ }
+ return matched,newlyTagged,nil
+}
