@@ -99,10 +99,13 @@ func (c *Config) GetFsubText() string {
 		return c.FsubText
 	}
 
-	return `<i><b>👋 Hᴇʏ ᴛʜᴇʀᴇ {mention}</b></i>
-<i>Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴍʏ ᴄʜᴀɴɴᴇʟs ғɪʀsᴛ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ғɪʟᴇ</i>
+	return `<b>♦️ READ THIS INSTRUCTION ♦️</b>
 
-<i>Cʟɪᴄᴋ ᴛʜᴇ <b>JOIN</b> ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴀɴᴅ ᴛʜᴇɴ <b>RETRY</b> ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ғɪʟᴇ 👇</i>`
+🗣 നിങ്ങൾ ചോദിക്കുന്ന ഫയൽ ലഭിക്കണമെങ്കിൽ ഞങ്ങളുടെ ചാനലിൽ ചേരണം. താഴെ ഉള്ള ബട്ടണിൽ ക്ലിക്ക് ചെയ്ത് ജോയിൻ ചെയ്‌താൽ ഞാൻ ആ ഫയൽ അയച്ചു തരുന്നതാണ്.. 😍
+
+🗣 To receive your file, you need to join our channel. Click the button below to join and I will send you the file right away.. 🙈
+
+<b>👇 JOIN THE CHANNEL BELOW TO GET YOUR FILE 👇</b>`
 }
 
 func (c *Config) GetFileCaption() string {
