@@ -51,19 +51,23 @@ func MarkForwardedMalayalam(bot *gotgbot.Bot,ctx *ext.Context)error{
   _,err:=m.Reply(bot,"Only original movie videos and .srt subtitle documents can be marked. ZIPs and unrelated files are ignored.",nil)
   return err
  }
- linked,err:=_app.DB.SetMalayalamCaptionTagForMedia(uniqueID,filename,size,true)
+ matched,newlyTagged,err:=_app.DB.TagIndexedMalayalamMedia(uniqueID,filename,size)
  if err!=nil{
   _app.Log.Warn("forwarded Malayalam file tag failed",zap.Error(err),zap.String("file_name",filename))
-  _,sendErr:=m.Reply(bot,"❌ The database tag could not be saved. No movie file record was changed.",nil)
+  _,sendErr:=m.Reply(bot,"❌ Could not verify or save the Malayalam Sub tag. Please try again. No duplicate movie file was created.",nil)
   return sendErr
  }
- if linked<=1{
-  _,err=m.Reply(bot,"⚠️ I received the file, but couldn't identify its existing indexed movie record by filename and size. No indexed movie was marked. Check that this exact file is already in your database.",nil)
+ if matched==0{
+  _,err=m.Reply(bot,fmt.Sprintf("⚠️ Not indexed yet.\nFile: %s\n\nI couldn't find the original file in the database. Please index it from your authorized movie channel first. Nothing was added or tagged.",filename),nil)
   return err
  }
- _app.Log.Info("admin forwarded Malayalam file tagged",zap.String("kind",kind),zap.Int("matched_indexed_records",linked-1))
  label:="movie video"
- if kind=="srt"{label="Malayalam SRT"}
- _,err=m.Reply(bot,fmt.Sprintf("✅ Marked %s for Malayalam Sub Files.\nFile: %s\nExisting indexed records matched: %d\n\nSearch for the movie again to see the updated section. No duplicate file was added.",label,filename,linked-1),nil)
+ if kind=="srt"{label="Malayalam subtitle"}
+ if newlyTagged==0{
+  _,err=m.Reply(bot,fmt.Sprintf("✅ Already added to Malayalam Sub Files.\nFile: %s\nExisting indexed records: %d\n\nNo duplicate was added.",filename,matched),nil)
+  return err
+ }
+ _app.Log.Info("admin forwarded Malayalam file tagged",zap.String("kind",kind),zap.Int("matched_indexed_records",matched),zap.Int("newly_tagged",newlyTagged))
+ _,err=m.Reply(bot,fmt.Sprintf("✅ %s added to Malayalam Sub Files.\nFile: %s\nNewly tagged records: %d\nExisting indexed records: %d\n\nSearch for the movie again to see the updated section. No duplicate file was added.",label,filename,newlyTagged,matched),nil)
  return err
 }
