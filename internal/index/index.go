@@ -106,6 +106,8 @@ func (o *Operation) run(ctx context.Context) {
 	}
 
 	c, err := telegram.NewClient(telegram.ClientConfig{
+		// Telegram assigned this bot to DC 5 (USER_MIGRATE_X).
+		DataCenter:    5,
 		AppID:         int32(appID),
 		AppHash:       appHash,
 		NoUpdates:     true,
