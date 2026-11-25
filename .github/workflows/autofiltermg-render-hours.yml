@@ -2,11 +2,9 @@ name: AutoFilterMG daily online hours
 
 on:
   schedule:
-    # Times are UTC. India: stop 01:00, resume 07:00.
-    - cron: '30 19 * * *'
+    # UTC: 07:00 IST and recovery every 10 minutes.
     - cron: '30 1 * * *'
-    # Recovery in case an exact-time GitHub schedule is delayed or dropped.
-    - cron: '13,43 * * * *'
+    - cron: '4,14,24,34,44,54 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -20,55 +18,20 @@ jobs:
   reconcile-hours:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_SERVICE_ID: srv-dc0r1767bikc73bktnf0
     steps:
-      - name: Match Render service to IST online hours
+      - name: Wake and check Render during IST online hours
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${RENDER_API_KEY}" ]]; then
-            echo "::error::Missing repository secret RENDER_API_KEY. Set it in GitHub Actions secrets."
-            exit 1
-          fi
-          ist_time=$(TZ=Asia/Kolkata date +%H%M)
-          if (( 10#${ist_time} >= 100 && 10#${ist_time} < 700 )); then
-            desired=suspended
-          else
-            desired=not_suspended
-          fi
-          url="https://api.render.com/v1/services/${RENDER_SERVICE_ID}"
-          echo "India time: $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M:%S %Z'); desired state: ${desired}"
-          service=$(curl --fail-with-body --silent --show-error --retry 2 --retry-delay 3 \
-            -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            -H "Accept: application/json" "${url}")
-          current=$(jq -r '.suspended // "unknown"' <<< "${service}")
-          echo "Render current state: ${current}"
-          if [[ "${current}" == "${desired}" ]]; then
-            echo "Already correctly configured; no action."
+          hour=$(TZ=Asia/Kolkata date +%H)
+          if (( 10#${hour} >= 1 && 10#${hour} < 7 )); then
+            echo "Quiet hours: no HTTP traffic. UptimeRobot schedule handles monitoring."
             exit 0
           fi
-          if [[ "${current}" != "suspended" && "${current}" != "not_suspended" ]]; then
-            echo "::error::Unknown service suspension state: ${current}; refusing unsafe action."
-            exit 1
-          fi
-          if [[ "${desired}" == "suspended" ]]; then
-            operation=suspend
-          else
-            operation=resume
-          fi
-          echo "Requesting Render service ${operation}."
-          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 3 \
-            -X POST -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            -H "Accept: application/json" "${url}/${operation}"
-          echo "Render accepted the ${operation} request."
-          sleep 10
-          service=$(curl --fail-with-body --silent --show-error --retry 2 --retry-delay 3 \
-            -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            -H "Accept: application/json" "${url}")
-          updated=$(jq -r '.suspended // "unknown"' <<< "${service}")
-          echo "Render state after request: ${updated}"
-          if [[ "${updated}" != "${desired}" ]]; then
-            echo "::warning::The requested transition is not yet reflected; the next scheduled check will retry if necessary."
-          fi
+          # Free services wake on HTTP requests. Suspend/resume API returned 403.
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 5 \
+            --connect-timeout 15 --max-time 75 \
+            --output /tmp/render-health.txt \
+            https://autofilterbotnew-ioi4.onrender.com/
+          grep -Fq "Telegram bot process is running" /tmp/render-health.txt
+          echo "HTTP listener responding; Telegram polling is not independently verified."
