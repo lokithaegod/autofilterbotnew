@@ -12,9 +12,13 @@ var tamilDubCaptionNegative=regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:no|without
 
 var tamilDubCaptionTrailingNegative=regexp.MustCompile(`(?i)(?:tamil|tam)[\s._-]*(?:dub|dubbed|dubbing)[\s._-]*(?:not[\s._-]*available|unavailable|no)(?:$|[^a-z0-9])`)
 
+var tamilAudioWord=regexp.MustCompile(`(?i)\btamil\b`)
+var tamilNonAudio=regexp.MustCompile(`(?i)\b(?:(?:no|without)\s+tamil(?:\s+audio)?|tamil\s+(?:subtitles?|subs?|audio\s+(?:unavailable|not available)|not available|unavailable))\b`)
+
 // IsTamilDubbedCaption detects explicit affirmative Tamil-dubbed claims.
 func IsTamilDubbedCaption(caption string)bool{
  cleaned:=space.ReplaceAllString(strings.TrimSpace(caption)," ")
  if tamilDubCaptionNegative.MatchString(cleaned)||tamilDubCaptionTrailingNegative.MatchString(cleaned){return false}
- return tamilDubCaptionMarker.MatchString(cleaned)||strings.Contains(cleaned,"தமிழ் டப்")
+ if tamilDubCaptionMarker.MatchString(cleaned)||strings.Contains(cleaned,"தமிழ் டப்"){return true}
+ return tamilAudioWord.MatchString(tamilNonAudio.ReplaceAllString(cleaned," "))
 }
