@@ -1,0 +1,67 @@
+name: AutoFilterMG UptimeRobot read-only status
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '10,40 * * * *'
+  push:
+    paths:
+      - '.github/workflows/uptimerobot-status.yml'
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read monitor status only
+        env:
+          UPTIMEROBOT_API_KEY: ${{ secrets.UPTIMEROBOT_API_KEY }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request, urllib.parse, datetime
+          from zoneinfo import ZoneInfo
+          key = os.environ.get("UPTIMEROBOT_API_KEY")
+          if not key:
+              raise SystemExit("UptimeRobot secret unavailable")
+          matches = []
+          for offset in range(0, 2050, 50):
+              form = dict(api_key=key, format="json", limit="50", offset=str(offset),
+                          logs="1", logs_limit="10", custom_uptime_ratios="1-7-30")
+              req = urllib.request.Request("https://api.uptimerobot.com/v2/getMonitors",
+                  data=urllib.parse.urlencode(form).encode(), method="POST")
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as response:
+                      data = json.load(response)
+              except Exception:
+                  raise SystemExit("UptimeRobot read request failed; no changes made") from None
+              if data.get("stat") != "ok":
+                  raise SystemExit("UptimeRobot rejected read request")
+              page = data.get("monitors", [])
+              matches.extend(m for m in page if str(m.get("url", "")).rstrip("/") ==
+                  "https://autofilterbotnew-ioi4.onrender.com")
+              if len(page) < 50:
+                  break
+          else:
+              raise SystemExit("Monitor pagination limit exceeded")
+          if len(matches) != 1:
+              raise SystemExit("Expected exactly one matching bot monitor")
+          m = matches[0]
+          tz = ZoneInfo("Asia/Kolkata")
+          def stamp(value):
+              try:
+                  return datetime.datetime.fromtimestamp(int(value), tz).isoformat()
+              except (ValueError, TypeError, OverflowError):
+                  return "unavailable"
+          status = {0:"Paused",1:"Not checked yet",2:"Up",8:"Seems down",9:"Down"}
+          print("Checked IST:", datetime.datetime.now(tz).isoformat())
+          print("Monitor status:", status.get(m.get("status"), "Unknown"))
+          interval = m.get("interval")
+          print("Interval seconds:", interval if isinstance(interval, int) else "unavailable")
+          ratios = str(m.get("custom_uptime_ratio", ""))
+          import re
+          print("Uptime ratios (1/7/30 days):", ratios if re.fullmatch(r"[0-9.\-]+", ratios) else "unavailable")
+          for log in m.get("logs", [])[:10]:
+              kind = {1:"Down",2:"Up",98:"Started",99:"Paused"}.get(log.get("type"), "Other")
+              print("Event:", kind, stamp(log.get("datetime")))
+          PY
