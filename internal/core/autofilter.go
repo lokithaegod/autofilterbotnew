@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Jisin0/autofilterbot/internal/autofilter"
@@ -144,7 +145,8 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
         if handled{return nil,nil}
         _ = _app.DB.LogSearch(query)
     }
-	cursor, err := _app.DB.SearchFiles(query)
+	searchQuery, preferTamil := tamilPreferredQuery(query)
+	cursor, err := _app.DB.SearchFiles(searchQuery)
 	if err != nil {
 		_app.Log.Warn("autofilter: search files failed", zap.Error(err))
 		return bot.SendMessage(inputMessage.GetChat().Id, "<i>I'm Having Some Database Issues Right Now 😓\nPlease Try Again Later!</i>", &gotgbot.SendMessageOpts{
@@ -167,7 +169,7 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 	}
 
 	if len(files) == 0 {
-        suggestions, suggestErr := SuggestTitles(query)
+        suggestions, suggestErr := SuggestTitles(searchQuery)
         if suggestErr == nil && len(suggestions)>0 {
             token:=saveSuggestionSession(fromUser.Id,inputMessage.GetChat().Id,suggestions)
             text:="🔎 No exact match for “"+query+"”.\nDid you mean one of these? Tap to search:"
@@ -216,7 +218,11 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
             buttons=append(buttons,downloadHelpButton())
             buttons=append(buttons,footerRow(uniqueId,0,len(files)))
         } else {
-            buttons=directFileKeyboard(uniqueId,groups,groups.firstKind(),0,inputMessage.GetChat().Id,bot.Username,_app.Config)
+            kind := groups.firstKind()
+            if preferTamil {
+                if len(groups.TamilVideos)>0 { kind="ta" } else if len(groups.english())>0 { kind="en" }
+            }
+            buttons=directFileKeyboard(uniqueId,groups,kind,0,inputMessage.GetChat().Id,bot.Username,_app.Config)
         }
     } else {
         buttons = append(buttons, headerRow(uniqueId, 0))
@@ -297,4 +303,12 @@ func backButton(uniqueId string, pageIndex int) gotgbot.InlineKeyboardButton {
 
 func nextButton(uniqueId string, pageIndex int) gotgbot.InlineKeyboardButton {
 	return gotgbot.InlineKeyboardButton{Text: "ɴᴇxᴛ »", CallbackData: fmt.Sprintf("navg|%s_%d", uniqueId, pageIndex)}
+}
+
+// A trailing Tamil language request is a preference, not a title token.
+func tamilPreferredQuery(query string) (string, bool) {
+ parts := strings.Fields(query)
+ if len(parts)>1 && strings.EqualFold(parts[len(parts)-1],"Tamil") { return strings.Join(parts[:len(parts)-1]," "),true }
+ if len(parts)>2 && strings.EqualFold(parts[len(parts)-2],"Tamil") && (strings.EqualFold(parts[len(parts)-1],"Dubbed") || strings.EqualFold(parts[len(parts)-1],"Dub") || strings.EqualFold(parts[len(parts)-1],"Audio")) { return strings.Join(parts[:len(parts)-2]," "),true }
+ return query,false
 }
