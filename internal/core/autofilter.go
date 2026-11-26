@@ -309,6 +309,6 @@ func nextButton(uniqueId string, pageIndex int) gotgbot.InlineKeyboardButton {
 func tamilPreferredQuery(query string) (string, bool) {
  parts := strings.Fields(query)
  if len(parts)>1 && strings.EqualFold(parts[len(parts)-1],"Tamil") { return strings.Join(parts[:len(parts)-1]," "),true }
- if len(parts)>2 && strings.EqualFold(parts[len(parts)-2],"Tamil") && (strings.EqualFold(parts[len(parts)-1],"Dubbed") || strings.EqualFold(parts[len(parts)-1],"Dub")) { return strings.Join(parts[:len(parts)-2]," "),true }
+ if len(parts)>2 && strings.EqualFold(parts[len(parts)-2],"Tamil") && (strings.EqualFold(parts[len(parts)-1],"Dubbed") || strings.EqualFold(parts[len(parts)-1],"Dub") || strings.EqualFold(parts[len(parts)-1],"Audio")) { return strings.Join(parts[:len(parts)-2]," "),true }
  return query,false
 }
