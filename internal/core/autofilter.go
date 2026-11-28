@@ -213,7 +213,12 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		uniqueId = functions.RandString(15)
 	)
 
-	if !hasEpisodes(files) {
+	episodes:=hasEpisodes(files)
+	var cards []movieCard
+	if !episodes {cards=buildMovieCards(files)}
+	if showMovieCards(cards) {
+		buttons=movieCardsKeyboard(uniqueId,cards,0)
+	} else if !episodes {
         // Movie results open directly with approved Malayalam videos, then
         // separate subtitle documents. English claims require explicit labels.
         groups,groupErr:=directMovieGroupsFromDB(files)
@@ -231,7 +236,7 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
             if search.audio == "tam" && len(groups.TamilVideos) > 0 {
                 kind = "ta"
             }
-            buttons=directFileKeyboard(uniqueId,groups,kind,0,inputMessage.GetChat().Id,bot.Username,_app.Config)
+            buttons=directFileKeyboard(uniqueId,groups,kind,0,inputMessage.GetChat().Id,bot.Username,_app.Config,cards...)
         }
     } else {
         buttons = append(buttons, headerRow(uniqueId, 0))

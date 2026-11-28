@@ -2,6 +2,9 @@ package core
 
 import (
  "fmt"
+ "os"
+ "net/url"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
  "regexp"
  "strconv"
  "strings"
@@ -18,7 +21,7 @@ import (
 // reliably. Episode files remain separate; an unparseable name stays a single
 // card rather than being incorrectly attached to another film.
 var movieYear = regexp.MustCompile(`(?i)^(.+?)[ ._\-(\[]+((?:19|20)[0-9]{2})(?:[^0-9]|$)`)
-var movieWord = regexp.MustCompile(`[^a-z0-9]+`)
+var movieWord = regexp.MustCompile(`[^\pL\pM\pN]+`)
 // Strip known channel branding before the actual movie title. This avoids
 // duplicate cards for e.g. "Inception.2010" and "@CC Links Inception.2010".
 var movieLeadingCC = regexp.MustCompile(`(?i)^(?:[._ -]*\[cc\][._ -]*|[._ -]*@cc[._ -]*links[._ -]*|[._ -]*@cc_links[._ -]*|[._ -]*@moviezday[._ -]*)+`)
@@ -50,7 +53,7 @@ type movieCard struct {
 
 func titleFromFilename(name string)(title,year,key string,ok bool){
  if _,isEpisode:=autofilter.SeasonNumber(name);isEpisode {return "","","",false}
- match:=movieYear.FindStringSubmatch(name)
+ match:=movieYear.FindStringSubmatch(movieLeadingCC.ReplaceAllString(name,""))
  if len(match)!=3 {return "","","",false}
  // Drop initial file group labels such as [Group] for prettier titles.
  raw:=strings.TrimSpace(strings.Trim(movieLeadingCC.ReplaceAllString(match[1],""),"._- []()"))
@@ -67,7 +70,8 @@ func buildMovieCards(pages []autofilter.Files) []movieCard {
  unique:=0
  for _,page:=range pages {
   for _,file:=range page {
-   title,year,key,ok:=titleFromFilename(file.FileName)
+   name:=sourceFileName(file.File)
+   title,year,key,ok:=titleFromFilename(name)
    if !ok {
     // Without a title + year match, don't risk merging unrelated releases.
     key=fmt.Sprintf("single|%d",unique)
@@ -81,10 +85,10 @@ func buildMovieCards(pages []autofilter.Files) []movieCard {
    }
    c:=&cards[i]
    switch {
-   case isSubtitleFile(file.FileName) || isMalayalamSubtitleArchive(file.FileName):
+   case isSubtitleFile(name) || isMalayalamSubtitleArchive(name):
     c.Subs=append(c.Subs,file)
-    if isMalayalamSubtitle(file.FileName) || isMalayalamSubtitleArchive(file.FileName){c.MalayalamSubs++}
-   case videoExtension.MatchString(file.FileName):
+    if isMalayalamSubtitle(name) || isMalayalamSubtitleArchive(name){c.MalayalamSubs++}
+   case captiontags.IsVideoUpload(name,file.FileType=="video"):
     c.Videos=append(c.Videos,file)
    default:
     c.Other=append(c.Other,file)
@@ -107,16 +111,45 @@ func clippedLabel(s string,max int) string {
  return string(r[:max-1])+"…"
 }
 
-func cardLabel(c movieCard) string {
- title:=c.Title
- if c.Year!="" {title+=" ("+c.Year+")"}
- label:="🎬 "+clippedLabel(title,37)
+func showMovieCards(cards []movieCard) bool {
+	count:=0
+	for _,c:= range cards {
+		if c.Year=="" {continue}
+		for _,file:=range c.files() {
+			if canHaveMovieAudio(file.File) {count++;break}
+		}
+		if count>=2 {return true}
+	}
+	return false
+}
 
- return label
+func (c movieCard) files() autofilter.Files {
+	files:=make(autofilter.Files,0,len(c.Videos)+len(c.Subs)+len(c.Other))
+	files=append(files,c.Videos...)
+	files=append(files,c.Subs...)
+	return append(files,c.Other...)
+}
+
+func cardLabel(c movieCard) string {
+	title:=clippedLabel(c.Title,45)
+	if c.Year!="" {title+=" ("+c.Year+")"}
+	return "🎬 "+title
+}
+
+func cardAudio(files autofilter.Files) []string {
+	var labels []string
+	for _,code:=range captiontags.AudioCodes {
+		for _,file:=range files {
+			if file.Audio[code] {
+				labels=append(labels,captiontags.LanguageLabel(code))
+				break
+			}
+		}
+	}
+	return labels
 }
 
 func cardsCallback(id string,page int)string{return fmt.Sprintf("cards|%s_%d",id,page)}
-func cardCallback(id string,index,page int)string{return fmt.Sprintf("card|%s_%d_%d",id,index,page)}
 func cardModeCallback(id string,index,page int,kind string)string{return fmt.Sprintf("card|%s_%d_%d_%s",id,index,page,kind)}
 
 func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.InlineKeyboardButton {
@@ -134,8 +167,13 @@ func movieCardsKeyboard(id string,cards []movieCard,page int) [][]gotgbot.Inline
  for i:=start;i<end;i++ {
   card:=cards[i]
   count:=len(card.Videos)+len(card.Subs)+len(card.Other)
-  label:=fmt.Sprintf("%s • %d files",cardLabel(card),count)
-  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:clippedLabel(label,75),CallbackData:cardCallback(id,i,0)}})
+  label:=fmt.Sprintf("%s · %d files",cardLabel(card),count)
+  if audio:=cardAudio(card.files());len(audio)>0 {
+   audioLabel:=strings.Join(audio," + ")
+   if len(audio)>2 {audioLabel=fmt.Sprintf("%s + %d",audio[0],len(audio)-1)}
+   label=fmt.Sprintf("%s · %s",cardLabel(card),audioLabel)
+  }
+  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:clippedLabel(label,75),CallbackData:cardModeCallback(id,i,0,"film")}})
 
  }
  var nav []gotgbot.InlineKeyboardButton
@@ -217,7 +255,7 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
   start:=page*perPage
   end:=start+perPage
   if end>len(all){end=len(all)}
-  keyboard=append(keyboard,all[start:end].Process(chatID,username,opts)...)
+  keyboard=append(keyboard,all[start:end].ProcessMovie(chatID,username,opts)...)
   var nav []gotgbot.InlineKeyboardButton
   if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:cardModeCallback(id,index,page-1,kind)})}
   nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("%d/%d • %d files",page+1,maxPages,len(all)),CallbackData:"ignore"})
@@ -228,6 +266,44 @@ func movieDetailKeyboard(id string,index,page int,card movieCard,chatID int64,us
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}})
  keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file results",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return keyboard
+}
+
+func filmKeyboard(id string,index,page int,card movieCard,groups directMovieGroups,kind string,chatID int64,username string,opts autofilter.ProcessFilesOptions) [][]gotgbot.InlineKeyboardButton {
+	rows:=[][]gotgbot.InlineKeyboardButton{{{Text:cardLabel(card),CallbackData:"ignore"}}}
+	if poster:=posterButton(id,index,card);len(poster)>0 { rows=append(rows,poster) }
+	rows=append(rows,movieSectionKeyboard(groups,kind,page,chatID,username,opts,card.Year!="",func(kind string,page int)string{
+		return cardModeCallback(id,index,page,kind)
+	})...)
+	return append(rows,[]gotgbot.InlineKeyboardButton{{Text:"↩️ Back to movie cards",CallbackData:cardsCallback(id,index/6)}})
+}
+
+func posterButton(id string,index int,card movieCard) []gotgbot.InlineKeyboardButton {
+	if card.Year=="" || os.Getenv("OMDB_API_KEY")=="" {return nil}
+	return []gotgbot.InlineKeyboardButton{{Text:"View poster",CallbackData:cardModeCallback(id,index,0,"poster")}}
+}
+
+func sendMoviePoster(bot *gotgbot.Bot,c *gotgbot.CallbackQuery,card movieCard) error {
+	key:=os.Getenv("OMDB_API_KEY")
+	if key=="" || card.Year=="" {
+		_,err:=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Poster unavailable",ShowAlert:true})
+		return err
+	}
+	info,err:=lookupMovieInfo(_app.Ctx,key,card.Title,card.Year)
+	if err!=nil || info.Response!="True" || info.Year!=card.Year || !validPosterURL(info.Poster) {
+		_,err=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Poster unavailable",ShowAlert:true})
+		return err
+	}
+	_,_=c.Answer(bot,nil)
+	_,err=bot.SendPhoto(c.Message.GetChat().Id,gotgbot.InputFileByURL(info.Poster),&gotgbot.SendPhotoOpts{Caption:cardLabel(card)})
+	if err!=nil {
+		_,err=bot.SendMessage(c.Message.GetChat().Id,cardLabel(card)+"\n"+info.Poster,nil)
+	}
+	return err
+}
+
+func validPosterURL(raw string) bool {
+	poster,err:=url.Parse(raw)
+	return err==nil && poster.Scheme=="https" && poster.Hostname()!="" && poster.User==nil
 }
 
 func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
@@ -253,8 +329,25 @@ func MovieCardCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
   if err!=nil||index<0||index>=len(cards){_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Movie not found",ShowAlert:true});return nil}
   kind:="all"
   if expected==4 {kind=data.Args[3]}
-  if kind!="all"&&kind!="tagged"&&kind!="other"{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true});return nil}
-  keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind,_app.Config)
+  switch kind {
+  case "poster":
+   return sendMoviePoster(bot,c,cards[index])
+  case "film","ml","ta","en":
+   card:=cards[index]
+   groups,err:=directMovieGroupsFromDB([]autofilter.Files{card.files()})
+   if err!=nil {
+    _app.Log.Warn("movie card sections unavailable",zap.Error(err))
+    keyboard=movieDetailKeyboard(result.UniqueId,index,page,card,c.Message.GetChat().Id,bot.Username,"all",_app.Config)
+   } else {
+    if kind=="film" && parseMovieSearch(result.Query).audio=="tam" && len(groups.TamilVideos)>0 {kind="ta"}
+    keyboard=filmKeyboard(result.UniqueId,index,page,card,groups,kind,c.Message.GetChat().Id,bot.Username,_app.Config)
+   }
+  case "all","tagged","other":
+   keyboard=movieDetailKeyboard(result.UniqueId,index,page,cards[index],c.Message.GetChat().Id,bot.Username,kind,_app.Config)
+  default:
+   _,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid file type",ShowAlert:true})
+   return nil
+  }
  }else{
   if page>=(len(cards)+5)/6 {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Page not found",ShowAlert:true});return nil}
   keyboard=movieCardsKeyboard(result.UniqueId,cards,page)

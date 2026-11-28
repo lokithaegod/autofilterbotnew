@@ -1,7 +1,10 @@
 package core
 
 import (
+	"github.com/Jisin0/autofilterbot/internal/captiontags"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/Jisin0/autofilterbot/internal/format"
 	"github.com/Jisin0/autofilterbot/internal/functions"
@@ -75,12 +78,37 @@ func FileDetails(bot *gotgbot.Bot, ctx *ext.Context) error {
 		return nil
 	}
 
+	name := sourceFileName(*f)
 	text := format.KeyValueFormat(_app.Config.GetFileDetailsTemplate(), map[string]string{
-		"file_name": f.FileName,
+		"file_name": name,
 		"file_size": functions.FileSizeToString(f.FileSize),
 		"file_type": f.FileType,
 		"date":      functions.FormatUnixTimestamp(f.Time),
 	})
+
+	if !strings.Contains(text, name) {
+		text = name + "\n\n" + text
+	}
+	legacyTamil := false
+	if f.Caption == nil {
+		tags, _ := _app.DB.FindTamilDubCaptionTags([]string{f.UniqueId})
+		legacyTamil = tags[f.UniqueId]
+	}
+	audio := detectedAudio(*f, legacyTamil)
+	var languages []string
+	for _, code := range captiontags.AudioCodes {
+		if audio[code] {
+			languages = append(languages, captiontags.LanguageLabel(code))
+		}
+	}
+	if len(languages) > 0 {
+		text += "\nAudio: " + strings.Join(languages, ", ")
+	}
+	if utf8.RuneCountInString(text) > 200 && c.Message != nil {
+		_, _ = c.Answer(bot, nil)
+		_, err = bot.SendMessage(c.Message.GetChat().Id, clippedLabel(text, 4096), nil)
+		return err
+	}
 
 	_, err = c.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text, ShowAlert: true, CacheTime: fiveHoursInSeconds})
 	if err != nil {

@@ -220,19 +220,28 @@ func MovieInfo(bot *gotgbot.Bot,ctx *ext.Context)error{
  if len(words)<2{_,err:=ctx.Message.Reply(bot,"Usage: /movie Bruce Almighty",nil);return err}
  name:=strings.Join(words[1:]," ")
  if len(name)>90 {_,err:=ctx.Message.Reply(bot,"Title is too long.",nil);return err}
- client:=&http.Client{Timeout:7*time.Second}
- endpoint:="https://www.omdbapi.com/?apikey="+url.QueryEscape(key)+"&t="+url.QueryEscape(name)+"&plot=short"
- resp,err:=client.Get(endpoint)
- if err!=nil{_,e:=ctx.Message.Reply(bot,"Movie information service unavailable.",nil);return e}
- defer resp.Body.Close()
- if resp.StatusCode!=200 {_,e:=ctx.Message.Reply(bot,"Movie information service returned an error.",nil);return e}
- var info movieInfo
- if err=json.NewDecoder(io.LimitReader(resp.Body,20000)).Decode(&info);err!=nil{return err}
+ info,err:=lookupMovieInfo(_app.Ctx,key,name,"")
+ if err!=nil {_,e:=ctx.Message.Reply(bot,"Movie information service unavailable.",nil);return e}
  if info.Response!="True" {_,e:=ctx.Message.Reply(bot,"No matching movie metadata found.",nil);return e}
  msg:=fmt.Sprintf("🎬 %s (%s)\nGenre: %s\nIMDb: %s\n\n%s",info.Title,info.Year,info.Genre,info.IMDBRating,info.Plot)
  if strings.HasPrefix(info.Poster,"https://"){msg+="\nPoster: "+info.Poster}
  _,err=ctx.Message.Reply(bot,msg,nil)
  return err
+}
+
+func lookupMovieInfo(ctx context.Context,key,title,year string)(movieInfo,error) {
+ var info movieInfo
+ params:=url.Values{"apikey":{key},"t":{title},"plot":{"short"}}
+ if year!="" {params.Set("y",year)}
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,"https://www.omdbapi.com/?"+params.Encode(),nil)
+ if err!=nil{return info,err}
+ client:=&http.Client{Timeout:7*time.Second}
+ resp,err:=client.Do(req)
+ if err!=nil{return info,err}
+ defer resp.Body.Close()
+ if resp.StatusCode!=http.StatusOK {return info,fmt.Errorf("movie metadata HTTP status %d",resp.StatusCode)}
+ err=json.NewDecoder(io.LimitReader(resp.Body,20000)).Decode(&info)
+ return info,err
 }
 
 func fuzzyDistance(a,b string) int {

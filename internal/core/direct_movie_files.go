@@ -142,7 +142,20 @@ func directFileCallback(id,kind string,page int)string{
  return fmt.Sprintf("direct|%s_%s_%d",id,kind,page)
 }
 
-func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatID int64,username string,opts autofilter.ProcessFilesOptions)[][]gotgbot.InlineKeyboardButton{
+func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatID int64,username string,opts autofilter.ProcessFilesOptions,cards ...movieCard)[][]gotgbot.InlineKeyboardButton{
+ compact:=len(cards)==1&&cards[0].Year!=""
+ result:=movieSectionKeyboard(g,kind,page,chatID,username,opts,compact,func(kind string,page int)string{return directFileCallback(id,kind,page)})
+ if compact {
+  title:=[][]gotgbot.InlineKeyboardButton{{{Text:cardLabel(cards[0]),CallbackData:"ignore"}}}
+  if poster:=posterButton(id,0,cards[0]);len(poster)>0 {title=append(title,poster)}
+  result=append(title,result...)
+ }
+ result=append(result,filterButton(id))
+ result=append(result,downloadHelpButton())
+ return append(result,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file filters",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
+}
+
+func movieSectionKeyboard(g directMovieGroups,kind string,page int,chatID int64,username string,opts autofilter.ProcessFilesOptions,compact bool, section func(string,int)string)[][]gotgbot.InlineKeyboardButton{
  if kind!="ml"&&kind!="en"&&kind!="ta"&&kind!="other"{kind=g.firstKind()}
  if kind=="other"{kind="en"} // Older callback compatibility
  selected:=g.selected(kind)
@@ -162,29 +175,30 @@ func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatI
  if end>len(selected){end=len(selected)}
  if start<end{
   // Use the same file-delivery links and ForceSub gate as the existing bot.
-  result=append(result,selected[start:end].Process(chatID,username,opts)...)
+  if compact {
+   result=append(result,selected[start:end].ProcessMovie(chatID,username,opts)...)
+  } else {
+   result=append(result,selected[start:end].Process(chatID,username,opts)...)
+  }
  }else{
   result=append(result,[]gotgbot.InlineKeyboardButton{{Text:"No files in this section",CallbackData:"ignore"}})
  }
  if maxPages>1{
   nav:=make([]gotgbot.InlineKeyboardButton,0,3)
-  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:directFileCallback(id,kind,page-1)})}
+  if page>0{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"⬅️",CallbackData:section(kind,page-1)})}
   nav=append(nav,gotgbot.InlineKeyboardButton{Text:fmt.Sprintf("Page %d/%d",page+1,maxPages),CallbackData:"ignore"})
-  if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:directFileCallback(id,kind,page+1)})}
+  if page+1<maxPages{nav=append(nav,gotgbot.InlineKeyboardButton{Text:"➡️",CallbackData:section(kind,page+1)})}
   result=append(result,nav)
  }
  if n:=len(g.MalayalamVideos)+len(g.MalayalamSubs);n>0&&kind!="ml"{
-  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("✅ Malayalam Sub & Files 👇 (%d)",n),CallbackData:directFileCallback(id,"ml",0)}})
+  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("✅ Malayalam Sub & Files 👇 (%d)",n),CallbackData:section("ml",0)}})
  }
  if n:=len(g.EnglishVideos)+len(g.EnglishSubs);n>0&&kind!="en"{
-  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🇬🇧 English Sub Files (%d)",n),CallbackData:directFileCallback(id,"en",0)}})
+  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🇬🇧 English Sub Files (%d)",n),CallbackData:section("en",0)}})
  }
  if len(g.TamilVideos)>0&&kind!="ta"{
-  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🎙️ Tamil Dubbed Files (%d)",len(g.TamilVideos)),CallbackData:directFileCallback(id,"ta",0)}})
+  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🎙️ Tamil Dubbed Files (%d)",len(g.TamilVideos)),CallbackData:section("ta",0)}})
  }
- result=append(result,filterButton(id))
- result=append(result,downloadHelpButton())
- result=append(result,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file filters",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return result
 }
 
@@ -224,7 +238,7 @@ func DirectFileCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
   _,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Subtitle labels unavailable. Please retry.",ShowAlert:true})
   return nil
  }
- keyboard:=directFileKeyboard(id,groups,kind,page,c.Message.GetChat().Id,bot.Username,_app.Config)
+ keyboard:=directFileKeyboard(id,groups,kind,page,c.Message.GetChat().Id,bot.Username,_app.Config,buildMovieCards(session.Files)...)
  _,_,err=c.Message.EditReplyMarkup(bot,&gotgbot.EditMessageReplyMarkupOpts{ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:keyboard}})
  if err!=nil{_app.Log.Warn("direct files: edit markup failed",zap.Error(err))}
  _,_=c.Answer(bot,nil)
