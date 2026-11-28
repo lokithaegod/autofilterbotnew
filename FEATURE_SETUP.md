@@ -27,3 +27,10 @@ GitHub branch: `feature/search-filters-welcome-controls`. Test builds with `go t
 
 ## Security
 Use Render environment variables for secrets. Your MongoDB Atlas access list currently includes a temporary broad network rule from previous debugging: replace it with restricted ingress when possible and rotate the database password.
+
+## Caption-aware search and availability alerts
+
+- Type `Hunger Games 2023 Tamil` or use `/find Hunger Games year:2023 lang:tam`. Browse includes six audio languages and a separate subtitle-file category. The result filters distinguish audio from subtitle documents.
+- In a private admin chat, run `/captionaudit` or `/captionaudit Hunger Games 2023`. It summarizes stored captions and audio labels and shows examples to review with `/refreshmalayalamsub`. Legacy documents whose media type cannot be identified are counted separately.
+- In a private chat, tap **Notify me when available** on eligible empty results or use `/notify Hunger Games 2023 Tamil`. Year and audio are optional. Use `/alerts` to list requests and `/unnotify` with the same query to cancel.
+- Alerts check the indexed catalog periodically while the bot runs and send one private message per request. Delivery follows the 7 AM to 1 AM IST window. Telegram delivery timeouts may leave an alert marked as unconfirmed. Cancel and recreate that alert if you want another attempt.

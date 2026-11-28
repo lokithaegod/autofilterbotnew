@@ -6,7 +6,7 @@ import (
  "strings"
  "time"
 
- "github.com/Jisin0/autofilterbot/internal/model"
+ "github.com/Jisin0/autofilterbot/internal/database"
  "go.mongodb.org/mongo-driver/bson"
  "go.mongodb.org/mongo-driver/mongo"
  "errors"
@@ -24,27 +24,20 @@ type CatalogFilter struct {
  MinSize int64
  MaxSize int64
  Category string
+ MediaOnly bool
 }
 
-func (c *Client) CatalogFiles(f CatalogFilter, limit int64) ([]model.File,error) {
- if limit < 1 || limit > 100 {limit=40}
+func (c *Client) CatalogCursor(ctx context.Context, f CatalogFilter, limit int64) (database.Cursor,error) {
  terms:=bson.A{}
- if f.Query!="" {
-  words:=strings.Fields(f.Query)
-  if len(words)>8 {words=words[:8]}
-  for _,w:=range words {
-   terms=append(terms,bson.M{"file_name":bson.M{"$regex":regexp.QuoteMeta(w),"$options":"i"}})
+ if f.Query!="" || f.Year!="" {
+  if f.Query!="" { terms=append(terms,movieSearchFilter(f.Query,f.Year)) } else {
+   terms=append(terms,bson.M{"file_name":bson.M{"$regex":filenameSearchPattern(f.Year)}})
   }
  }
- if f.Year!="" {terms=append(terms,bson.M{"file_name":bson.M{"$regex":`(^|[^0-9])`+regexp.QuoteMeta(f.Year)+`([^0-9]|$)`,"$options":"i"}})}
  if f.Quality!="" && f.Quality!="all" {
   q:=f.Quality
   if q=="2160p" {q="(2160p|4k)"} else {q=regexp.QuoteMeta(q)}
   terms=append(terms,bson.M{"file_name":bson.M{"$regex":`(^|[^a-z0-9])`+q+`([^a-z0-9]|$)`,"$options":"i"}})
- }
- if f.Language!="" && f.Language!="all" {
-  langs:=map[string]string{"mal":"malayalam|mal|malyalam","tam":"tamil|tam","hin":"hindi|hin","eng":"english|eng"}
-  if lang,ok:=langs[f.Language];ok {terms=append(terms,bson.M{"file_name":bson.M{"$regex":`(^|[^a-z])(`+lang+`)([^a-z]|$)`,"$options":"i"}})}
  }
  if f.Type!="" && f.Type!="all" {terms=append(terms,bson.M{"file_type":f.Type})}
  size:=bson.M{}
@@ -55,6 +48,9 @@ func (c *Client) CatalogFiles(f CatalogFilter, limit int64) ([]model.File,error)
  case "movies": terms=append(terms,bson.M{"file_name":bson.M{"$regex":`(19|20)[0-9]{2}`}})
  case "series":terms=append(terms,bson.M{"file_name":bson.M{"$regex":`S[0-9]{1,2}E[0-9]{1,3}`,"$options":"i"}})
  case "documents":terms=append(terms,bson.M{"file_name":bson.M{"$regex":`\.(pdf|epub|docx?|pptx?|txt)$`,"$options":"i"}})
+ case "subs":
+  pattern:=bson.M{"$regex":`(?i)\.(srt|ass|ssa|vtt|sub)$`}
+  terms=append(terms,bson.M{"$or":bson.A{bson.M{"file_name":pattern},bson.M{"original_file_name":pattern}}})
  case "latest": // no additional filter
  }
  filter:=bson.M{}
@@ -62,12 +58,9 @@ func (c *Client) CatalogFiles(f CatalogFilter, limit int64) ([]model.File,error)
  order:=bson.D{{Key:"time",Value:-1}}
  if f.Sort=="smallest" {order=bson.D{{Key:"file_size",Value:1},{Key:"time",Value:-1}}}
  if f.Sort=="largest" {order=bson.D{{Key:"file_size",Value:-1},{Key:"time",Value:-1}}}
- cur,err:=c.db.Collection("Files").Find(context.Background(),filter,options.Find().SetSort(order).SetLimit(limit))
- if err!=nil{return nil,err}
- defer cur.Close(context.Background())
- var out []model.File
- if err=cur.All(context.Background(),&out);err!=nil {return nil,err}
- return out,nil
+ opts:=options.Find().SetSort(order)
+ if !f.MediaOnly && (f.Language=="" || f.Language=="all") {opts.SetLimit(limit)}
+ return c.fileCollection.Find(ctx,filter,opts)
 }
 
 type SearchMetric struct {

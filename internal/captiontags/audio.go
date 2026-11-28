@@ -135,3 +135,10 @@ func readAudioLabels(text string, filename bool, found, nameLabels, subtitles, e
 		}
 	}
 }
+
+// AudioCodes defines the language order in search controls and file labels.
+var AudioCodes = []string{"mal", "tam", "hin", "tel", "kan", "eng"}
+
+func LanguageLabel(code string) string {
+	return map[string]string{"mal": "Malayalam", "tam": "Tamil", "hin": "Hindi", "tel": "Telugu", "kan": "Kannada", "eng": "English"}[code]
+}

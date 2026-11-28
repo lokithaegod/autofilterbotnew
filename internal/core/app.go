@@ -169,6 +169,7 @@ func Run(opts RunAppOptions) {
  logger.Info(fmt.Sprintf("@%s started successfully !", bot.Username))
 
 	go _app.RestartActiveIndexOperations(ctx)
+	go runAvailabilityAlerts(ctx,bot)
 
 	if appConfig.FileCollectionUpdater {
 		_app.DB.RunCollectionUpdater(ctx, logger)
