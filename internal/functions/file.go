@@ -43,16 +43,19 @@ func FileFromMessage(m *gotgbot.Message) *model.File {
 		return nil
 	}
 
+	originalFileName := fileName
 	fileName = RemoveSymbols(RemoveExtension(fileName))
 
 	return &model.File{
-		UniqueId:    uniqueId,
-		FileId:      fileId,
-		FileName:    fileName,
-		FileType:    fileType,
-		FileSize:    fileSize,
-		Time:        m.Date,
-		ChatId:      m.Chat.Id,
-		MessageLink: m.GetLink(),
+		UniqueId:         uniqueId,
+		OriginalFileName: originalFileName,
+		Caption:          &m.Caption,
+		FileId:           fileId,
+		FileName:         fileName,
+		FileType:         fileType,
+		FileSize:         fileSize,
+		Time:             m.Date,
+		ChatId:           m.Chat.Id,
+		MessageLink:      m.GetLink(),
 	}
 }

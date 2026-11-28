@@ -21,6 +21,9 @@ type File struct {
 	FileId string `json:"file_id" bson:"file_id"`
 	// Name of the file including extension
 	FileName string `json:"file_name" bson:"file_name"`
+	// Source metadata is optional for files indexed by older versions.
+	OriginalFileName string  `json:"original_file_name,omitempty" bson:"original_file_name,omitempty"`
+	Caption          *string `json:"caption,omitempty" bson:"caption,omitempty"`
 	// Type of file either document/video/audio.
 	FileType string `json:"file_type" bson:"file_type"`
 	// Size of the file in bytes.

@@ -2,7 +2,7 @@ package core
 
 import "testing"
 
-func TestTamilPreferredQuery(t *testing.T) {
+func TestTamilSearchQuery(t *testing.T) {
  cases := []struct { input, title string; prefer bool }{
   {"The A Team Tamil", "The A Team", true},
   {"The A Team Tamil Dub", "The A Team", true},
@@ -15,7 +15,8 @@ func TestTamilPreferredQuery(t *testing.T) {
   {"The A Team Tamil Sub", "The A Team Tamil Sub", false},
  }
  for _, c := range cases {
-  title, prefer := tamilPreferredQuery(c.input)
+  query := parseMovieSearch(c.input)
+  title, prefer := query.title, query.audio == "tam"
   if title != c.title || prefer != c.prefer {
    t.Errorf("%q: got (%q,%v), want (%q,%v)", c.input,title,prefer,c.title,c.prefer)
   }
