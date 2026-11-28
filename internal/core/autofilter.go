@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Jisin0/autofilterbot/internal/autofilter"
@@ -145,8 +144,10 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
         if handled{return nil,nil}
         _ = _app.DB.LogSearch(query)
     }
-	searchQuery, preferTamil := tamilPreferredQuery(query)
-	cursor, err := _app.DB.SearchFiles(searchQuery)
+	search := parseMovieSearch(query)
+	searchContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cursor, err := _app.DB.SearchMovieCandidates(searchContext, search.title, search.year, search.audio != "")
 	if err != nil {
 		_app.Log.Warn("autofilter: search files failed", zap.Error(err))
 		return bot.SendMessage(inputMessage.GetChat().Id, "<i>I'm Having Some Database Issues Right Now 😓\nPlease Try Again Later!</i>", &gotgbot.SendMessageOpts{
@@ -157,7 +158,17 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 		})
 	}
 
-	files, err := autofilter.FilesFromCursor(context.Background(), cursor, fullSeriesSearchOptions{perPage: _app.Config.GetMaxPerPage()},)
+	defer cursor.Close(context.Background())
+	options := fullSeriesSearchOptions{perPage: _app.Config.GetMaxPerPage()}
+	var files []autofilter.Files
+	if search.audio == "" {
+		files, err = autofilter.FilesFromCursor(searchContext, cursor, options)
+		if err == nil {
+			err = searchContext.Err()
+		}
+	} else {
+		files, err = audioSearchFiles(searchContext, cursor, options, search.audio, _app.DB.FindTamilDubCaptionTags)
+	}
 	if err != nil {
 		_app.Log.Warn("autofilter: files from cursor failed", zap.Error(err))
 		return bot.SendMessage(inputMessage.GetChat().Id, "<i>Processing Results Failed 🤖</i>", &gotgbot.SendMessageOpts{
@@ -169,15 +180,17 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 	}
 
 	if len(files) == 0 {
-        suggestions, suggestErr := SuggestTitles(searchQuery)
-        if suggestErr == nil && len(suggestions)>0 {
-            token:=saveSuggestionSession(fromUser.Id,inputMessage.GetChat().Id,suggestions)
-            text:="🔎 No exact match for “"+query+"”.\nDid you mean one of these? Tap to search:"
-            return bot.SendMessage(inputMessage.GetChat().Id,text,&gotgbot.SendMessageOpts{
-                ReplyParameters:&gotgbot.ReplyParameters{MessageId:inputMessage.GetMessageId()},
-                ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:suggestionButtons(token,suggestions)},
-            })
-        }
+		if search.audio == "" && search.year == "" {
+			suggestions, suggestErr := SuggestTitles(search.title)
+			if suggestErr == nil && len(suggestions) > 0 {
+				token := saveSuggestionSession(fromUser.Id, inputMessage.GetChat().Id, suggestions)
+				text := "🔎 No exact match for “" + query + "”.\nDid you mean one of these? Tap to search:"
+				return bot.SendMessage(inputMessage.GetChat().Id, text, &gotgbot.SendMessageOpts{
+					ReplyParameters: &gotgbot.ReplyParameters{MessageId: inputMessage.GetMessageId()},
+					ReplyMarkup: gotgbot.InlineKeyboardMarkup{InlineKeyboard: suggestionButtons(token, suggestions)},
+				})
+			}
+		}
 		vals := _app.BasicMessageValues(ctx, map[string]any{"query": query})
 		return bot.SendMessage(inputMessage.GetChat().Id, format.KeyValueFormat(_app.Config.GetNoResultText(), vals), &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
@@ -219,8 +232,8 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
             buttons=append(buttons,footerRow(uniqueId,0,len(files)))
         } else {
             kind := groups.firstKind()
-            if preferTamil {
-                if len(groups.TamilVideos)>0 { kind="ta" } else if len(groups.english())>0 { kind="en" }
+            if search.audio == "tam" && len(groups.TamilVideos) > 0 {
+                kind = "ta"
             }
             buttons=directFileKeyboard(uniqueId,groups,kind,0,inputMessage.GetChat().Id,bot.Username,_app.Config)
         }
@@ -303,12 +316,4 @@ func backButton(uniqueId string, pageIndex int) gotgbot.InlineKeyboardButton {
 
 func nextButton(uniqueId string, pageIndex int) gotgbot.InlineKeyboardButton {
 	return gotgbot.InlineKeyboardButton{Text: "ɴᴇxᴛ »", CallbackData: fmt.Sprintf("navg|%s_%d", uniqueId, pageIndex)}
-}
-
-// A trailing Tamil language request is a preference, not a title token.
-func tamilPreferredQuery(query string) (string, bool) {
- parts := strings.Fields(query)
- if len(parts)>1 && strings.EqualFold(parts[len(parts)-1],"Tamil") { return strings.Join(parts[:len(parts)-1]," "),true }
- if len(parts)>2 && strings.EqualFold(parts[len(parts)-2],"Tamil") && (strings.EqualFold(parts[len(parts)-1],"Dubbed") || strings.EqualFold(parts[len(parts)-1],"Dub") || strings.EqualFold(parts[len(parts)-1],"Audio")) { return strings.Join(parts[:len(parts)-2]," "),true }
- return query,false
 }

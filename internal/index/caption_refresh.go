@@ -12,19 +12,19 @@ import (
  "github.com/amarnathcjd/gogram/telegram"
 )
 
-// CaptionScanResult summarizes media posts inspected without touching the
-// existing index checkpoints, file documents, or download IDs.
+// CaptionScanResult summarizes caption and tag updates for the inspected posts.
 type CaptionScanResult struct {
  Scanned int
  Captioned int
  Linked int
+ CaptionsRefreshed int
 }
 
 // RefreshChannelCaptions reads the latest channel messages through the same
 // MTProto bot login already used by the movie indexer. When message IDs are
-// supplied, only that inclusive range is scanned. The callback persists tags
-// in a separate collection and must be idempotent.
-func RefreshChannelCaptions(ctx context.Context, botToken string, channelID int64, startID,endID int64, apply func(string,string,int64,bool)(int,error)) (CaptionScanResult,error) {
+// supplied, only that inclusive range is scanned. The callbacks update
+// captions and tags without changing index checkpoints or file IDs.
+func RefreshChannelCaptions(ctx context.Context, botToken string, channelID int64, startID,endID int64, apply func(string,string,int64,bool)(int,error), saveCaption func(string,string,int64,string)(int,error)) (CaptionScanResult,error) {
  var result CaptionScanResult
  if channelID==0 || botToken=="" {return result,fmt.Errorf("missing channel ID or bot token")}
  if apply==nil{return result,fmt.Errorf("caption tag callback unavailable")}
@@ -58,7 +58,7 @@ func RefreshChannelCaptions(ctx context.Context, botToken string, channelID int6
    for n:=from;n<=to;n++{ids=append(ids,&telegram.InputMessageID{ID:int32(n)})}
    history,err:=client.ChannelsGetMessages(channel,ids)
    if err!=nil{return result,err}
-   if err=scanCaptionMessages(history,channelID,apply,&result);err!=nil{return result,err}
+   if err=scanCaptionMessages(history,channelID,apply,saveCaption,&result);err!=nil{return result,err}
   }
  }else{
   // No arguments: read the latest 300 posts, in three requests.
@@ -73,7 +73,7 @@ func RefreshChannelCaptions(ctx context.Context, botToken string, channelID int6
    if err!=nil{return result,err}
    msgs:=captionHistoryMessages(history)
    if len(msgs)==0{break}
-   if err=scanCaptionMessages(history,channelID,apply,&result);err!=nil{return result,err}
+   if err=scanCaptionMessages(history,channelID,apply,saveCaption,&result);err!=nil{return result,err}
    oldest:=int32(0)
    for _,item:=range msgs{
     if m,ok:=item.(*telegram.MessageObj);ok && (oldest==0||m.ID<oldest){oldest=m.ID}
@@ -95,12 +95,11 @@ func captionHistoryMessages(history telegram.MessagesMessages) []telegram.Messag
  }
 }
 
-func scanCaptionMessages(history telegram.MessagesMessages,channelID int64,apply func(string,string,int64,bool)(int,error),result *CaptionScanResult)error{
+func scanCaptionMessages(history telegram.MessagesMessages,channelID int64,apply func(string,string,int64,bool)(int,error), saveCaption func(string,string,int64,string)(int,error), result *CaptionScanResult)error{
  for _,item:=range captionHistoryMessages(history){
   msg,ok:=item.(*telegram.MessageObj)
   if !ok {continue}
   result.Scanned++
-  if !captiontags.IsTagged(msg.Message){continue}
   media,ok:=msg.Media.(*telegram.MessageMediaDocument);if !ok{continue}
   doc,ok:=media.Document.(*telegram.DocumentObj);if !ok{continue}
   name:=""
@@ -112,8 +111,14 @@ func scanCaptionMessages(history telegram.MessagesMessages,channelID int64,apply
    }
   }
   if !captiontags.IsVideoUpload(name,hasVideoAttribute){continue}
-  result.Captioned++
   identity:=fmt.Sprintf("mtproto-caption:%d:%d",channelID,msg.ID)
+  if saveCaption != nil {
+   linked, err := saveCaption(identity, strings.TrimSpace(name), int64(doc.Size), msg.Message)
+   if err != nil { return err }
+   result.CaptionsRefreshed += linked
+  }
+  if !captiontags.IsTagged(msg.Message){continue}
+  result.Captioned++
   linked,err:=apply(identity,strings.TrimSpace(name),int64(doc.Size),true)
   if err!=nil{return err}
   if linked>1 {result.Linked+=linked-1}

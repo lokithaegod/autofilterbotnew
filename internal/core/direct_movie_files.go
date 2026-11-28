@@ -7,6 +7,7 @@ import (
  "strings"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
  "go.uber.org/zap"
@@ -84,11 +85,20 @@ func groupDirectMovieFiles(pages []autofilter.Files,tagged map[string]bool)direc
 func groupDirectMovieFilesWithTamil(pages []autofilter.Files,tagged,tamilTagged map[string]bool)directMovieGroups {
  var g directMovieGroups
  for _,page:=range pages{for _,f:=range page{
-  subtitle:=isMovieSubtitleDocument(f.FileName)
+  name:=sourceFileName(f.File)
+  subtitle:=isMovieSubtitleDocument(name)
+  malayalam:=tagged[f.UniqueId]
+  tamil:=tamilTagged[f.UniqueId]
+  if f.Caption!=nil {
+   malayalam=malayalam||captiontags.IsTagged(*f.Caption)
+   tamil=captiontags.IsTamilDubbedCaption(*f.Caption)
+  }
+  video := captiontags.IsVideoUpload(name, f.FileType == "video")
+  legacyTamilVideo := f.OriginalFileName == "" && !subtitle && tamil
   switch{
-  case isManuallySuitableMalayalamFile(f.FileName,tagged[f.UniqueId]):
+  case isManuallySuitableMalayalamFile(name,malayalam):
    if subtitle{g.MalayalamSubs=append(g.MalayalamSubs,f)}else{g.MalayalamVideos=append(g.MalayalamVideos,f)}
-  case (videoExtension.MatchString(f.FileName)||f.FileType=="video") && (tamilTagged[f.UniqueId]||isTamilDubbedVideo(f.FileName)):
+  case (video && (tamil || isTamilDubbedVideo(name))) || legacyTamilVideo:
    g.TamilVideos=append(g.TamilVideos,f)
   default:
    if subtitle{g.EnglishSubs=append(g.EnglishSubs,f)}else{g.EnglishVideos=append(g.EnglishVideos,f)}

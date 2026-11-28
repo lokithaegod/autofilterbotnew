@@ -50,8 +50,12 @@ func refreshForwardedMalayalamVideo(bot *gotgbot.Bot,m *gotgbot.Message,channels
   _,err:=m.Reply(bot,"The forwarded post must contain a movie video with a filename, not an SRT or other document.",nil)
   return err
  }
- if !captiontags.IsTagged(forwarded.Caption){
-  _,err:=m.Reply(bot,"This forwarded video has no positive 'Malayalam Sub' caption. Add the caption in the storage channel, forward the post again, then retry.",nil)
+ refreshed, err := _app.DB.SetFileCaptionForMedia(uniqueID, name, size, forwarded.Caption)
+ if err != nil {
+  return err
+ }
+ if !captiontags.IsTagged(forwarded.Caption) {
+  _, err := m.Reply(bot, fmt.Sprintf("Caption metadata refreshed for %d indexed file(s).", refreshed), nil)
   return err
  }
  linked,err:=_app.DB.SetMalayalamCaptionTagForMedia(uniqueID,name,size,true)
@@ -128,18 +132,18 @@ func RefreshMalayalamSub(bot *gotgbot.Bot,ctx *ext.Context)error{
   _,err:=m.Reply(bot,"Another linked-post refresh is already running.",nil)
   return err
  }
- _,err=m.Reply(bot,"🔄 Checking the specified channel post(s); no existing movie records will be modified.",nil)
+ _,err=m.Reply(bot,"🔄 Checking the specified channel post(s); refreshing caption metadata.",nil)
  if err!=nil{malayalamRefreshRunning.Store(false);return err}
  go func(){
   defer malayalamRefreshRunning.Store(false)
-  result,scanErr:=index.RefreshChannelCaptions(_app.Ctx,bot.Token,chat.Id,from,to,_app.DB.SetMalayalamCaptionTagForMedia)
+  result,scanErr:=index.RefreshChannelCaptions(_app.Ctx,bot.Token,chat.Id,from,to,_app.DB.SetMalayalamCaptionTagForMedia, _app.DB.SetFileCaptionForMedia)
   if scanErr!=nil{
    _app.Log.Warn("linked Malayalam caption refresh failed",zap.Int64("chat_id",chat.Id),zap.Error(scanErr))
-   _,_=bot.SendMessage(m.Chat.Id,"❌ Could not read those channel posts with the bot's Telegram permissions. Nothing was refreshed. Forward the captioned video to this chat and reply /refreshmalayalamsub instead.",nil)
+   _,_=bot.SendMessage(m.Chat.Id,"❌ Could not read those channel posts with the bot's Telegram permissions. Forward the captioned video to this chat and reply /refreshmalayalamsub instead.",nil)
    return
   }
-  resultText:=fmt.Sprintf("✅ Post check finished.\nPosts checked: %d\nPosts marked Malayalam Sub: %d\nIndexed file IDs tagged: %d.",result.Scanned,result.Captioned,result.Linked)
-  if result.Captioned==0{resultText+="\nNo matching captioned videos found in the specified messages."}
+  resultText:=fmt.Sprintf("✅ Post check finished.\nPosts checked: %d\nPosts marked Malayalam Sub: %d\nIndexed file IDs tagged: %d.\nIndexed captions refreshed: %d.",result.Scanned,result.Captioned,result.Linked,result.CaptionsRefreshed)
+  if result.Captioned==0{resultText+="\nNo Malayalam Sub labels found in the specified messages."}
   _,_=bot.SendMessage(m.Chat.Id,resultText,nil)
  }()
  return nil

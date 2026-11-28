@@ -107,6 +107,8 @@ func (o *Operation) MessageProcessor(ctx context.Context, c chan indexBatch) {
 					UniqueId: functions.RandString(15),
 					FileId:   fileID,
 					FileName: fileName,
+					OriginalFileName: fileName,
+					Caption: &msg.Message,
 					FileType: fileType,
 					FileSize: int64(doc.Size),
 					Time:     int64(msg.Date),
