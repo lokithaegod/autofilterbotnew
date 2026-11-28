@@ -20,7 +20,8 @@ var (
 	languageWords    = regexp.MustCompile(`[\pL\pM\pN]+`)
 	subtitleHeading  = regexp.MustCompile(`(?i)\b(?:subs?|subbed|subtitles?|esubs?|msubs?|srt|cc)\b\s*[:=–—-]`)
 	audioHeading     = regexp.MustCompile(`(?i)\b(?:audio(?:\s+(?:tracks?|languages?))?|languages?|dubbed\s+in)\b\s*[:=–—-]`)
-	clauseBreak      = regexp.MustCompile(`[\r\n;|•]+`)
+	negativeHeading  = regexp.MustCompile(`(?i)\b(?:no|without)\s+audio\s*[:=–—-]`)
+	clauseText       = regexp.MustCompile(`[^\r\n;|•]+`)
 	releaseTokens    = regexp.MustCompile(`(?i)\b(?:mp3|aac|ac3|eac3|dts|flac|kbps|hd|4k|480p|720p|1080p|2160p)\b`)
 	releaseYearToken = regexp.MustCompile(`(?:^|[^0-9])(?:19|20)[0-9]{2}(?:$|[^a-zA-Z0-9])`)
 )
@@ -67,11 +68,19 @@ func readAudioLabels(text string, filename bool, found, nameLabels, subtitles, e
 			text = text[year[1]:]
 		}
 	}
-	text = subtitleHeading.ReplaceAllString(strings.ToLower(text), "| subtitles:")
-	text = audioHeading.ReplaceAllString(text, "| audio:")
-	for _, clause := range clauseBreak.Split(text, -1) {
+	text = subtitleHeading.ReplaceAllString(strings.ToLower(text), "; subtitles:")
+	text = negativeHeading.ReplaceAllString(text, "; noaudio:")
+	text = audioHeading.ReplaceAllString(text, "; audio:")
+
+	previousEnd := 0
+	previousSubtitles := false
+	for _, bounds := range clauseText.FindAllStringIndex(text, -1) {
+		sameLineList := strings.TrimSpace(text[previousEnd:bounds[0]]) == "|"
+		clause := text[bounds[0]:bounds[1]]
+		previousEnd = bounds[1]
 		words := languageWords.FindAllString(clause, -1)
 		if len(words) == 0 {
+			previousSubtitles = false
 			continue
 		}
 		subtitleList := subtitleWord(words[0])
@@ -88,7 +97,10 @@ func readAudioLabels(text string, filename bool, found, nameLabels, subtitles, e
 				onlyLanguages = false
 			}
 		}
-		subtitleList = subtitleList || (onlyLanguages && subtitleWord(last))
+		subtitleList = subtitleList || (onlyLanguages && subtitleWord(last)) ||
+			(sameLineList && previousSubtitles && onlyLanguages && !audioWord(last))
+		previousSubtitles = subtitleList
+		negativeList := words[0] == "noaudio"
 
 		for i, word := range words {
 			code := LanguageCode(word)
@@ -109,7 +121,7 @@ func readAudioLabels(text string, filename bool, found, nameLabels, subtitles, e
 				subtitles[code] = true
 				continue
 			}
-			if prev == "no" || prev == "without" || prev == "not" || next == "unavailable" ||
+			if negativeList || prev == "no" || prev == "without" || prev == "not" || next == "unavailable" ||
 				(next == "not" && after == "available") ||
 				(audioWord(next) && (after == "not" || after == "unavailable")) {
 				excluded[code] = true
