@@ -3,6 +3,8 @@ package autofilter
 import (
 	"fmt"
  "regexp"
+ "strings"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
 
 	"github.com/Jisin0/autofilterbot/internal/format"
 	"github.com/Jisin0/autofilterbot/internal/functions"
@@ -24,6 +26,7 @@ type Files []File
 // File wraps model.File with some search result specific data.
 type File struct {
 	model.File
+	Audio map[string]bool `json:"audio,omitempty"`
 	// Indicates whether the file was selected from the selection menu.
 	IsSelected bool `json:"selected,omitempty"`
 }
@@ -54,6 +57,11 @@ func ProcessFiles(files Files, chatId int64, botUsername string, opts ProcessFil
 		}.Encode())
 		size := functions.FileSizeToString(f.FileSize)
         displayName:=displayFileName(f.FileName)
+		var labels []string
+		for _, code := range captiontags.AudioCodes {
+			if f.Audio[code] { labels = append(labels,captiontags.LanguageLabel(code)) }
+		}
+		if len(labels)>0 { displayName += " • Audio: " + strings.Join(labels,", ") }
 
 		if opts.GetSizeButton() {
 			result = append(result, []gotgbot.InlineKeyboardButton{{Text: displayName, CallbackData: "fdetails|" + f.UniqueId}, {Text: size, Url: url}})

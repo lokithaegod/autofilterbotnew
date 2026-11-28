@@ -1,6 +1,7 @@
 package core
 
 import (
+ "context"
  "encoding/json"
  "fmt"
  "html"
@@ -15,8 +16,8 @@ import (
  "time"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
  "github.com/Jisin0/autofilterbot/internal/database/mongo"
- "github.com/Jisin0/autofilterbot/internal/model"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
@@ -77,8 +78,8 @@ func parseDiscover(input string)(mongo.CatalogFilter,error){
    if !valid[v]{return f,fmt.Errorf("invalid quality")}
    if v=="4k"{v="2160p"};f.Quality=v
   case "lang","language":
-   aliases:=map[string]string{"malayalam":"mal","tamil":"tam","hindi":"hin","english":"eng","mal":"mal","tam":"tam","hin":"hin","eng":"eng"}
-   var ok bool;f.Language,ok=aliases[v];if !ok{return f,fmt.Errorf("invalid language")}
+   f.Language=captiontags.LanguageCode(v)
+   if f.Language=="" {return f,fmt.Errorf("invalid audio language")}
   case "type":
    if v!="video"&&v!="document"&&v!="audio"{return f,fmt.Errorf("invalid file type")}
    f.Type=v
@@ -92,18 +93,34 @@ func parseDiscover(input string)(mongo.CatalogFilter,error){
   }
  }
  if f.MaxSize>0&&f.MinSize>f.MaxSize{return f,fmt.Errorf("minmb greater than maxmb")}
- f.Query=strings.Join(words," ")
+ parsed:=parseMovieSearch(strings.Join(words," "))
+ f.Query=parsed.title
+ if f.Year=="" {f.Year=parsed.year}
+ if f.Language=="" {f.Language=parsed.audio}
  if len(f.Query)>100{return f,fmt.Errorf("search too long")}
  return f,nil
 }
 
-func sendCatalog(bot *gotgbot.Bot,chatID int64,category string,files []model.File) error {
+func searchCatalog(filter mongo.CatalogFilter, limit int) (autofilter.Files,error) {
+ return searchCatalogContext(_app.Ctx,filter,limit)
+}
+
+func searchCatalogContext(parent context.Context, filter mongo.CatalogFilter, limit int) (autofilter.Files,error) {
+ ctx,cancel:=context.WithTimeout(parent,15*time.Second)
+ defer cancel()
+ cursor,err:=_app.DB.CatalogCursor(ctx,filter,int64(limit))
+ if err!=nil{return nil,err}
+ defer cursor.Close(context.Background())
+ rows,err:=collectSearchFiles(ctx,cursor,limit,limit,filter.Language,_app.DB.FindTamilDubCaptionTags,filter.MediaOnly)
+ if len(rows)==0{return nil,err}
+ return rows[0],err
+}
+
+func sendCatalog(bot *gotgbot.Bot,chatID int64,category string,files autofilter.Files) error {
  if len(files)==0 {_,err:=bot.SendMessage(chatID,"No matching indexed files found.",nil);return err}
- if len(files)>0 && (category=="SERIES" || category=="Filtered files") {autofilter.SortModelEpisodes(files)}
+ if category=="SERIES" || category=="Filtered files" {autofilter.SortEpisodes([]autofilter.Files{files})}
  if len(files)>15 {files=files[:15]}
- wrapped:=make(autofilter.Files,0,len(files))
- for _,f:=range files {wrapped=append(wrapped,autofilter.File{File:f})}
- keyboard:=wrapped.Process(chatID,bot.Username,_app.Config)
+ keyboard:=files.Process(chatID,bot.Username,_app.Config)
  _,err:=bot.SendMessage(chatID,fmt.Sprintf("📁 %s • %d results (tap to receive)",html.EscapeString(category),len(files)),&gotgbot.SendMessageOpts{ParseMode:gotgbot.ParseModeHTML,ReplyMarkup:gotgbot.InlineKeyboardMarkup{InlineKeyboard:keyboard}})
  return err
 }
@@ -115,7 +132,7 @@ func AdvancedFind(bot *gotgbot.Bot,ctx *ext.Context)error{
  if text=="" {_,e:=ctx.Message.Reply(bot,"Usage: /find Bruce Almighty year:2003 quality:720p lang:eng sort:smallest\nOptions: type:video minmb:100 maxmb:2000",nil);return e}
  filter,err:=parseDiscover(text)
  if err!=nil{_,e:=ctx.Message.Reply(bot,"Invalid filter: "+err.Error(),nil);return e}
- files,err:=_app.DB.CatalogFiles(filter,40)
+ files,err:=searchCatalog(filter,40)
  if err!=nil{return err}
  if filter.Query!="" {_= _app.DB.LogSearch(filter.Query)}
  return sendCatalog(bot,ctx.Message.Chat.Id,"Filtered files",files)
@@ -125,25 +142,31 @@ func BrowseFiles(bot *gotgbot.Bot,ctx *ext.Context)error{
  keyboard:=gotgbot.InlineKeyboardMarkup{InlineKeyboard:[][]gotgbot.InlineKeyboardButton{
   {{Text:"🎞 Movies",CallbackData:"browse|movies"},{Text:"📺 Series",CallbackData:"browse|series"}},
   {{Text:"📄 Documents",CallbackData:"browse|documents"},{Text:"🆕 Latest uploads",CallbackData:"browse|latest"}},
-  {{Text:"🌐 Malayalam",CallbackData:"browse|mal"},{Text:"🌐 Tamil",CallbackData:"browse|tam"}},
-  {{Text:"🌐 Hindi",CallbackData:"browse|hin"},{Text:"🌐 English",CallbackData:"browse|eng"}},
+  {{Text:"💬 Subtitle files",CallbackData:"browse|subs"}},
  }}
- _,err:=bot.SendMessage(ctx.EffectiveChat.Id,"📚 Browse indexed files by category or language", &gotgbot.SendMessageOpts{ReplyMarkup:keyboard})
+ for i:=0;i<len(captiontags.AudioCodes);i+=2 {
+  var row []gotgbot.InlineKeyboardButton
+  for _,code:=range captiontags.AudioCodes[i:i+2] {
+   row=append(row,gotgbot.InlineKeyboardButton{Text:captiontags.LanguageLabel(code)+" audio",CallbackData:"browse|"+code})
+  }
+  keyboard.InlineKeyboard=append(keyboard.InlineKeyboard,row)
+ }
+ _,err:=bot.SendMessage(ctx.EffectiveChat.Id,"📚 Browse indexed files by category or audio language", &gotgbot.SendMessageOpts{ReplyMarkup:keyboard})
  return err
 }
 
 func BrowseCallback(bot *gotgbot.Bot,ctx *ext.Context)error{
  c:=ctx.CallbackQuery
  cat:=strings.TrimPrefix(c.Data,"browse|")
- allowed:=map[string]bool{"movies":true,"series":true,"documents":true,"latest":true,"mal":true,"tam":true,"hin":true,"eng":true}
- if !allowed[cat]{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Unknown category",ShowAlert:true});return nil}
+ allowed:=map[string]bool{"movies":true,"series":true,"documents":true,"latest":true,"subs":true}
+ if !allowed[cat] && captiontags.LanguageLabel(cat)==""{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Unknown category",ShowAlert:true});return nil}
  // Verify rate limits and restrictions before catalog browsing.
  blocked,err:=_app.DB.IsUserBlocked(c.From.Id)
  if err!=nil||blocked {_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Access unavailable",ShowAlert:true});return nil}
  if !SearchAllowed(c.From.Id){_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Try again shortly",ShowAlert:true});return nil}
  f:=mongo.CatalogFilter{Category:cat}
- if len(cat)==3 {f.Category="";f.Language=cat}
- files,err:=_app.DB.CatalogFiles(f,40)
+ if label:=captiontags.LanguageLabel(cat);label!="" {f.Category="";f.Language=cat;cat=label+" audio"}
+ files,err:=searchCatalog(f,40)
  if err!=nil{_,_=c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Database unavailable",ShowAlert:true});return nil}
  _,_=c.Answer(bot,nil)
  return sendCatalog(bot,c.From.Id,strings.ToUpper(cat),files)

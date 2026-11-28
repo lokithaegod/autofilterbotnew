@@ -6,8 +6,10 @@ import (
  "sort"
  "strconv"
  "strings"
+ "unicode"
 
  "github.com/Jisin0/autofilterbot/internal/autofilter"
+ "github.com/Jisin0/autofilterbot/internal/captiontags"
  "github.com/Jisin0/autofilterbot/pkg/callbackdata"
  "github.com/PaulSonOfLars/gotgbot/v2"
  "github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -28,17 +30,9 @@ func qualityMatches(name, quality string) bool {
 func languageMatches(name, language string) bool {
  if language == "all" { return true }
  if language == "mal" && strings.Contains(name,"മലയാളം") {return true}
- // Match labels in filenames only; never infer audio track languages.
- aliases := map[string][]string{
-  "mal": {"malayalam", "mal", "malyalam"},
-  "tam": {"tamil", "tam"},
-  "hin": {"hindi", "hin"},
-  "eng": {"english", "eng"},
- }
- lower := strings.ToLower(name)
- for _, word := range aliases[language] {
-  re := regexp.MustCompile(`(^|[^a-z])` + word + `([^a-z]|$)`)
-  if re.MatchString(lower) { return true }
+ // Subtitle document labels are independent of the audio filter.
+ for _, word := range strings.FieldsFunc(name,func(r rune)bool{return !unicode.IsLetter(r)&&!unicode.IsMark(r)}) {
+  if captiontags.LanguageCode(word)==language{return true}
  }
  return false
 }
@@ -65,7 +59,15 @@ func subtitleMatches(name,kind string) bool {
 func matchingSubtitleFiles(pages []autofilter.Files,quality,language,season,kind string) autofilter.Files {
  var out autofilter.Files
  for _,page:=range pages {for _,f:=range page {
-  if !qualityMatches(f.FileName,quality)||!languageMatches(f.FileName,language)||!subtitleMatches(f.FileName,kind){continue}
+  name:=sourceFileName(f.File)
+  if !qualityMatches(name,quality)||(!subtitleMatches(name,kind)&&(kind!="video"||f.FileType!="video")){continue}
+  if language!="all" {
+   audio:=f.Audio
+   if audio==nil {audio=detectedAudio(f.File,false)}
+   if kind=="sub"||kind=="msub" {
+    if !languageMatches(name,language)&&!(language=="mal"&&isMalayalamSubtitle(name)){continue}
+   } else if !audio[language] {continue}
+  }
   if season!="all" {
    n,ok:=autofilter.SeasonNumber(f.FileName)
    if !ok||strconv.Itoa(n)!=season {continue}
@@ -109,7 +111,7 @@ func FilterSearch(bot *gotgbot.Bot, ctx *ext.Context) error {
  pageArg:=4
  if len(data.Args)==6 {kind=data.Args[4];pageArg=5}
  validQ := map[string]bool{"all":true,"480p":true,"720p":true,"1080p":true,"2160p":true}
- validL := map[string]bool{"all":true,"mal":true,"tam":true,"hin":true,"eng":true}
+ validL := map[string]bool{"all":true,"mal":true,"tam":true,"hin":true,"tel":true,"kan":true,"eng":true}
  validKind:=map[string]bool{"all":true,"video":true,"sub":true,"msub":true}
  page,err := strconv.Atoi(data.Args[pageArg])
  if err!=nil || !validQ[q] || !validL[l] || !validKind[kind] || page<0 { _,_ = c.Answer(bot,&gotgbot.AnswerCallbackQueryOpts{Text:"Invalid filter",ShowAlert:true}); return nil }
@@ -130,12 +132,15 @@ func FilterSearch(bot *gotgbot.Bot, ctx *ext.Context) error {
   qualityRow=append(qualityRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,item.code,l,season,kind,0)})
  }
  keyboard=append(keyboard,qualityRow)
- keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:"🌐 Language (filename labels)",CallbackData:"ignore"}})
+ heading:="🌐 Audio language"
+ if kind=="sub"||kind=="msub" {heading="💬 Subtitle file language"}
+ keyboard=append(keyboard,[]gotgbot.InlineKeyboardButton{{Text:heading,CallbackData:"ignore"}})
  var languageRow []gotgbot.InlineKeyboardButton
- for _, item := range []struct{code,label string}{{"all","All"},{"mal","Malayalam"},{"tam","Tamil"},{"hin","Hindi"},{"eng","English"}} {
+ for _, item := range []struct{code,label string}{{"all","All"},{"mal","Malayalam"},{"tam","Tamil"},{"hin","Hindi"},{"eng","English"},{"tel","Telugu"},{"kan","Kannada"}} {
   label := item.label
   if l==item.code {label="✅ "+label}
   languageRow=append(languageRow,gotgbot.InlineKeyboardButton{Text:label,CallbackData:filterCallback(id,q,item.code,season,kind,0)})
+  if len(languageRow)==4 {keyboard=append(keyboard,languageRow);languageRow=nil}
  }
  keyboard=append(keyboard,languageRow)
  if len(seasons)>0 {

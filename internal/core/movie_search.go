@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -53,26 +54,46 @@ func sourceFileName(file model.File) string {
 	return file.FileName
 }
 
-func matchesAudio(file model.File, language string, legacyTamil bool) bool {
+func canHaveMovieAudio(file model.File) bool {
 	name := sourceFileName(file)
 	if isMovieSubtitleDocument(name) || file.FileType == model.FileTypeVoice {
 		return false
 	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".pdf", ".epub", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".rar", ".7z":
+		return false
+	}
+	return true
+}
+
+func detectedAudio(file model.File, legacyTamil bool) map[string]bool {
+	name := sourceFileName(file)
+	if !canHaveMovieAudio(file) {
+		return nil
+	}
 	caption := ""
 	if file.Caption != nil {
 		caption = *file.Caption
-	} else if language == "tam" && legacyTamil {
-		return true
 	}
-	return captiontags.AudioLanguages(name, caption)[language]
+	audio := captiontags.AudioLanguages(name, caption)
+	if file.Caption == nil && legacyTamil {
+		audio["tam"] = true
+	}
+	return audio
+}
+
+func matchesAudio(file model.File, language string, legacyTamil bool) bool {
+	return detectedAudio(file, legacyTamil)[language]
 }
 
 // Read candidates in batches so legacy Tamil tags can be loaded together and
 // the existing display limit applies to matching files.
 func audioSearchFiles(ctx context.Context, cursor database.Cursor, options fullSeriesSearchOptions, language string, findTamil func([]string) (map[string]bool, error)) ([]autofilter.Files, error) {
+	return collectSearchFiles(ctx, cursor, options.GetMaxPages()*options.GetMaxPerPage(), options.GetMaxPerPage(), language, findTamil, false)
+}
+
+func collectSearchFiles(ctx context.Context, cursor database.Cursor, maxFiles, perPage int, language string, findTamil func([]string) (map[string]bool, error), mediaOnly bool) ([]autofilter.Files, error) {
 	const batchSize = 100
-	perPage := options.GetMaxPerPage()
-	maxFiles := options.GetMaxPages() * perPage
 	var pages []autofilter.Files
 	var page autofilter.Files
 	for count := 0; count < maxFiles; {
@@ -84,7 +105,7 @@ func audioSearchFiles(ctx context.Context, cursor database.Cursor, options fullS
 				return nil, err
 			}
 			batch = append(batch, file)
-			if language == "tam" && file.Caption == nil {
+			if file.Caption == nil {
 				ids = append(ids, file.UniqueId)
 			}
 		}
@@ -92,15 +113,19 @@ func audioSearchFiles(ctx context.Context, cursor database.Cursor, options fullS
 		if len(ids) > 0 {
 			var err error
 			legacy, err = findTamil(ids)
-			if err != nil {
+			if err != nil && language == "tam" {
 				return nil, err
 			}
 		}
 		for _, file := range batch {
-			if !matchesAudio(file, language, legacy[file.UniqueId]) {
+			if mediaOnly && !canHaveMovieAudio(file) {
 				continue
 			}
-			page = append(page, autofilter.File{File: file})
+			audio := detectedAudio(file, legacy[file.UniqueId])
+			if language != "" && language != "all" && !audio[language] {
+				continue
+			}
+			page = append(page, autofilter.File{File: file, Audio: audio})
 			count++
 			if len(page) == perPage {
 				pages = append(pages, page)

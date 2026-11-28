@@ -182,6 +182,7 @@ func directFileKeyboard(id string,g directMovieGroups,kind string,page int,chatI
  if len(g.TamilVideos)>0&&kind!="ta"{
   result=append(result,[]gotgbot.InlineKeyboardButton{{Text:fmt.Sprintf("🎙️ Tamil Dubbed Files (%d)",len(g.TamilVideos)),CallbackData:directFileCallback(id,"ta",0)}})
  }
+ result=append(result,filterButton(id))
  result=append(result,downloadHelpButton())
  result=append(result,[]gotgbot.InlineKeyboardButton{{Text:"📁 Original file filters",CallbackData:fmt.Sprintf("navg|%s_0",id)}})
  return result

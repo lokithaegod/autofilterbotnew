@@ -19,7 +19,14 @@ var publicBotCommands = []gotgbot.BotCommand{
  {Command:"about", Description:"About the bot"},
 }
 
-var adminBotCommands = append(append([]gotgbot.BotCommand{},publicBotCommands...),
+var privateBotCommands = append(append([]gotgbot.BotCommand{},publicBotCommands...),
+ gotgbot.BotCommand{Command:"notify",Description:"Get an alert when a file is available"},
+ gotgbot.BotCommand{Command:"alerts",Description:"List your pending availability alerts"},
+ gotgbot.BotCommand{Command:"unnotify",Description:"Cancel an availability alert"},
+)
+
+var adminBotCommands = append(append([]gotgbot.BotCommand{},privateBotCommands...),
+ gotgbot.BotCommand{Command:"captionaudit",Description:"Audit indexed video captions"},
  gotgbot.BotCommand{Command:"admin",Description:"Open my private admin menu"},
  gotgbot.BotCommand{Command:"dashboard",Description:"Private admin dashboard"},
  gotgbot.BotCommand{Command:"alive",Description:"Check uptime and bot status"},
@@ -43,7 +50,7 @@ func registerBotCommands(bot *gotgbot.Bot, adminIDs []int64, log *zap.Logger) {
  if _,err:=bot.SetMyCommands(publicBotCommands,&gotgbot.SetMyCommandsOpts{
   Scope:gotgbot.BotCommandScopeDefault{},
  });err!=nil {log.Warn("command menu: default registration failed",zap.Error(err))}
- if _,err:=bot.SetMyCommands(publicBotCommands,&gotgbot.SetMyCommandsOpts{
+ if _,err:=bot.SetMyCommands(privateBotCommands,&gotgbot.SetMyCommandsOpts{
   Scope:gotgbot.BotCommandScopeAllPrivateChats{},
  });err!=nil {log.Warn("command menu: private registration failed",zap.Error(err))}
  for _,id:=range adminIDs {

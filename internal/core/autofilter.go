@@ -160,15 +160,7 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 
 	defer cursor.Close(context.Background())
 	options := fullSeriesSearchOptions{perPage: _app.Config.GetMaxPerPage()}
-	var files []autofilter.Files
-	if search.audio == "" {
-		files, err = autofilter.FilesFromCursor(searchContext, cursor, options)
-		if err == nil {
-			err = searchContext.Err()
-		}
-	} else {
-		files, err = audioSearchFiles(searchContext, cursor, options, search.audio, _app.DB.FindTamilDubCaptionTags)
-	}
+	files, err := audioSearchFiles(searchContext, cursor, options, search.audio, _app.DB.FindTamilDubCaptionTags)
 	if err != nil {
 		_app.Log.Warn("autofilter: files from cursor failed", zap.Error(err))
 		return bot.SendMessage(inputMessage.GetChat().Id, "<i>Processing Results Failed 🤖</i>", &gotgbot.SendMessageOpts{
@@ -191,15 +183,19 @@ func _autofilter(bot *gotgbot.Bot, ctx *ext.Context) (*gotgbot.Message, error) {
 				})
 			}
 		}
+		rows := [][]gotgbot.InlineKeyboardButton{
+			{{Text: "Sᴇᴀʀᴄʜ Oɴ Gᴏᴏɢʟᴇ 🔎", Url: fmt.Sprintf("https://google.com/?q=%s", query)}},
+			{{Text: "Cᴏᴘʏ", CopyText: &gotgbot.CopyTextButton{Text: query}}, button.Close(fromUser.Id)},
+		}
+		if inputMessage.GetChat().Type=="private" && len("notify|"+query)<=64 {
+			rows=append([][]gotgbot.InlineKeyboardButton{{{Text:"Notify me when available",CallbackData:"notify|"+query}}},rows...)
+		}
 		vals := _app.BasicMessageValues(ctx, map[string]any{"query": query})
 		return bot.SendMessage(inputMessage.GetChat().Id, format.KeyValueFormat(_app.Config.GetNoResultText(), vals), &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: inputMessage.GetMessageId(),
 			},
-			ReplyMarkup: gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-				{{Text: "Sᴇᴀʀᴄʜ Oɴ Gᴏᴏɢʟᴇ 🔎", Url: fmt.Sprintf("https://google.com/?q=%s", query)}},
-				{{Text: "Cᴏᴘʏ", CopyText: &gotgbot.CopyTextButton{Text: query}}, button.Close(fromUser.Id)},
-			}},
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{InlineKeyboard:rows},
 			ParseMode: gotgbot.ParseModeHTML,
 		})
 	}
